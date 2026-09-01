@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+*.local
+
+# client
+client/dist/
+client/dev-dist/
+
+# server
+server/dist/
+server/prisma/dev.db
+
+# OS
+.DS_Store
+Thumbs.db

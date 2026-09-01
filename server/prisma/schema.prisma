@@ -1,0 +1,298 @@
+// Sendvoice data model — PRD §7 (one expressive core, not per-vertical forks)
+// and §9.2 (multi-tenant, row-level isolation enforced at the DB, not the app).
+//
+// Row-level security policies are applied via a raw-SQL migration
+// (see prisma/migrations/.../rls.sql) — Prisma's schema DSL doesn't express
+// RLS directly. Every tenant-scoped table below carries a tenantId column
+// that the RLS policy filters on.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  OWNER
+  EDITOR
+  VIEWER
+  ACCOUNTANT
+}
+
+enum DocType {
+  QUOTE
+  PROFORMA
+  INVOICE
+  CREDIT_NOTE
+  RECEIPT
+  DELIVERY_NOTE
+  STATEMENT
+}
+
+enum DocStatus {
+  DRAFT
+  APPROVED
+  SENT
+  VIEWED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  VOID
+}
+
+enum LineType {
+  ITEM
+  SERVICE
+  LABOUR
+  EXPENSE
+  DISCOUNT
+  DEPOSIT
+  SUBTOTAL_HEADER
+}
+
+enum DeliveryRail {
+  RAIL_A_ASSISTED
+  RAIL_B_DIRECT
+  EMAIL
+  SMS
+}
+
+enum DeliveryStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Tenant {
+  id          String   @id @default(cuid())
+  legalName   String
+  tradingName String?
+  country     String // ISO 3166-1 alpha-2 — keys tax profile + payment routing
+  currency    String // ISO 4217
+  taxId       String?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+
+  users         User[]
+  customers     Customer[]
+  documents     Document[]
+  numberSeries  NumberSeries[]
+  taxProfiles   TaxProfile[]
+  waba          WabaConnection?
+  paymentLinks  PaymentProviderLink[]
+}
+
+model User {
+  id       String @id @default(cuid())
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  phone    String @unique // E.164 — primary identity, PRD §8.1
+  name     String?
+  role     Role   @default(OWNER)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  tenantId     String
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+  name         String
+  whatsapp     String? // E.164
+  email        String?
+  address      String?
+  taxId        String?
+  notes        String?
+  optedInAt    DateTime? // WhatsApp consent capture — PRD §10.3
+  optedOutAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  documents Document[]
+
+  @@index([tenantId])
+  @@index([tenantId, whatsapp])
+}
+
+// Per-series, per-year sequential counters — PRD §9.4. Numbers are only
+// ever allocated inside the approval transaction, never at draft time.
+model NumberSeries {
+  id       String  @id @default(cuid())
+  tenantId String
+  tenant   Tenant  @relation(fields: [tenantId], references: [id])
+  docType  DocType
+  prefix   String
+  year     Int
+  lastSeq  Int     @default(0)
+
+  @@unique([tenantId, docType, year])
+}
+
+model TaxProfile {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  version   Int      @default(1) // historical invoices pin a version — never re-render with new rates
+  rules     Json // { mode: 'none'|'inclusive'|'exclusive'|'multi_rate'|'compound'|'withholding'|'reverse_charge', rates: [...] }
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+// A draft is client-owned (ULID, offline-capable). It becomes a Document
+// only at approval, inside a transaction that allocates the number.
+model Document {
+  id             String    @id @default(cuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  customerId     String
+  customer       Customer  @relation(fields: [customerId], references: [id])
+  docType        DocType
+  number         String? // null until approved
+  status         DocStatus @default(DRAFT)
+  currency       String
+  taxProfileId   String?
+  taxProfileVersion Int?
+  issueDate      DateTime?
+  dueDate        DateTime?
+  notes          String?
+  subtotal       Decimal   @db.Decimal(14, 2)
+  taxTotal       Decimal   @db.Decimal(14, 2)
+  total          Decimal   @db.Decimal(14, 2)
+  amountPaid     Decimal   @default(0) @db.Decimal(14, 2)
+  convertedFromId String?  // quote→invoice lineage (PRD §7.3)
+  pdfUrl         String? // content-addressed, immutable object storage (PRD §9.2)
+  approvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  lines      DocumentLine[]
+  deliveries Delivery[]
+  payments   Payment[]
+  events     DocumentEvent[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, customerId])
+  @@unique([tenantId, docType, number])
+}
+
+model DocumentLine {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id])
+  position    Int
+  type        LineType @default(ITEM)
+  description String
+  qty         Decimal? @db.Decimal(12, 3)
+  unit        String?
+  rate        Decimal  @db.Decimal(14, 2)
+  discount    Decimal? @db.Decimal(14, 2)
+  taxCode     String?
+  imageUrl    String?
+  note        String?
+
+  @@index([documentId])
+}
+
+// Append-only audit trail for every state transition on an approved
+// document — PRD §12 P0.
+model DocumentEvent {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id])
+  type       String // 'approved' | 'status_changed' | 'reminder_sent' | 'voided' | ...
+  data       Json?
+  actorId    String?
+  createdAt  DateTime @default(now())
+
+  @@index([documentId])
+}
+
+model Delivery {
+  id         String         @id @default(cuid())
+  documentId String
+  document   Document       @relation(fields: [documentId], references: [id])
+  rail       DeliveryRail
+  status     DeliveryStatus @default(QUEUED)
+  templateId String? // Rail B only — which approved template was used
+  idempotencyKey String     @unique
+  attempts   Int            @default(0)
+  lastError  String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([documentId])
+}
+
+model Payment {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id])
+  amount     Decimal  @db.Decimal(14, 2)
+  method     String // 'psp' | 'cash' | 'bank_transfer'
+  provider   String? // 'paystack' | 'flutterwave' | 'stripe' | 'razorpay' | 'mercadopago' | 'xendit'
+  reference  String?
+  recordedAt DateTime @default(now())
+
+  @@index([documentId])
+}
+
+// Per-tenant WABA — Embedded Signup grants revocable access; each merchant
+// keeps their own WABA inside their own Meta Business Portfolio (PRD §10.1).
+model WabaConnection {
+  id            String   @id @default(cuid())
+  tenantId      String   @unique
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  wabaId        String?
+  phoneNumberId String?
+  qualityRating String? // mirrors Meta's quality webhook
+  status        String  @default("not_connected") // not_connected | pending | connected | throttled
+  connectedAt   DateTime?
+
+  templates WabaTemplate[]
+}
+
+model WabaTemplate {
+  id         String         @id @default(cuid())
+  wabaId     String
+  waba       WabaConnection @relation(fields: [wabaId], references: [id])
+  name       String // invoice_new | invoice_reminder_due | invoice_reminder_overdue | payment_received | quote_new
+  status     String // submitted | approved | rejected | paused
+  rejectionReason String?
+  updatedAt  DateTime @updatedAt
+
+  @@unique([wabaId, name])
+}
+
+model PaymentProviderLink {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  provider   String // paystack | flutterwave | stripe | razorpay | mercadopago | xendit
+  status     String  @default("not_connected")
+  externalId String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+}
+
+// Per-tenant, per-market send-cost ledger — PRD §10.4, day-one requirement,
+// not a v2 feature. Keys on recipient country, not merchant country.
+model SendCostLedgerEntry {
+  id               String   @id @default(cuid())
+  tenantId         String
+  recipientCountry String
+  category         String // utility | authentication | marketing | business_agent
+  units            Int      @default(1)
+  costMinorUnits   Int // cost in the smallest currency unit, e.g. cents
+  currency         String
+  occurredAt       DateTime @default(now())
+
+  @@index([tenantId, occurredAt])
+}

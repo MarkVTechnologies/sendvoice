@@ -1,0 +1,15 @@
+{
+  "name": "sendvoice",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev:client": "npm run dev --workspace client",
+    "dev:server": "npm run dev --workspace server",
+    "build:client": "npm run build --workspace client",
+    "build:server": "npm run build --workspace server",
+    "typecheck": "npm run typecheck --workspace server && npm exec --workspace client -- tsc -b --noEmit"
+  }
+}
