@@ -47,7 +47,16 @@ export default function Dashboard() {
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium text-neutral-500">Recent</h2>
           {invoices.map((inv) => (
-            <div key={inv.id} className="flex items-center justify-between rounded border p-3 text-sm">
+            <button
+              key={inv.id}
+              className="flex items-center justify-between rounded border p-3 text-left text-sm disabled:opacity-50"
+              disabled={!inv.pdfUrl}
+              onClick={async () => {
+                if (!inv.pdfUrl) return
+                const url = await api.fetchInvoicePdfUrl(inv.id)
+                window.open(url, '_blank')
+              }}
+            >
               <div>
                 <p className="font-medium">{inv.number}</p>
                 <p className="text-neutral-500">{inv.customer.name}</p>
@@ -55,7 +64,7 @@ export default function Dashboard() {
               <p className="font-medium">
                 {inv.currency} {inv.total}
               </p>
-            </div>
+            </button>
           ))}
         </div>
       )}

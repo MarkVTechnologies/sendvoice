@@ -170,7 +170,13 @@ model Document {
   total          Decimal   @db.Decimal(14, 2)
   amountPaid     Decimal   @default(0) @db.Decimal(14, 2)
   convertedFromId String?  // quote→invoice lineage (PRD §7.3)
-  pdfUrl         String? // content-addressed, immutable object storage (PRD §9.2)
+  pdfUrl         String? // set to /invoices/:id/pdf once rendered
+  // Stored in Postgres for now, not real object storage — see the note in
+  // src/services/pdf.ts. Swappable behind renderAndStorePdf() without
+  // touching callers once a real object store is provisioned (needed
+  // anyway once the hosted invoice page and WhatsApp document headers want
+  // a public, unauthenticated URL).
+  pdfData        Bytes?
   approvedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

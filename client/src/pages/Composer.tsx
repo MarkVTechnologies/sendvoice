@@ -86,6 +86,17 @@ export default function Composer() {
         <p className="text-neutral-600">
           {sentInvoice.currency} {sentInvoice.total} to {sentInvoice.customer.name}
         </p>
+        {sentInvoice.pdfUrl && (
+          <button
+            className="rounded border px-4 py-2"
+            onClick={async () => {
+              const url = await api.fetchInvoicePdfUrl(sentInvoice.id)
+              window.open(url, '_blank')
+            }}
+          >
+            View PDF
+          </button>
+        )}
         <button className="mt-4 rounded border px-4 py-2" onClick={resetDraft}>
           New invoice
         </button>

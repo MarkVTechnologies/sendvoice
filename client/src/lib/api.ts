@@ -47,6 +47,7 @@ export type Invoice = {
   status: string
   currency: string
   createdAt: string
+  pdfUrl: string | null
   customer: { name: string; whatsapp: string | null }
 }
 
@@ -67,4 +68,21 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   listInvoices: () => request<Invoice[]>('/invoices'),
+  // The PDF route requires the same Bearer auth as everything else, so a
+  // plain <a href> won't carry it — fetch it as a blob and hand back an
+  // object URL the caller can open/revoke.
+  fetchInvoicePdfUrl: async (invoiceId: string): Promise<string> => {
+    const token = useAuth.getState().token
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/invoices/${invoiceId}/pdf`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+    } catch {
+      throw new ApiError('Could not reach the server')
+    }
+    if (!res.ok) throw new ApiError(`PDF fetch failed: ${res.status}`, res.status)
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
+  },
 }

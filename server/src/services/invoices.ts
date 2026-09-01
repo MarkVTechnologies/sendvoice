@@ -82,6 +82,7 @@ export async function approveInvoice(tx: PrismaClient, tenantId: string, input: 
       approvedAt: new Date(),
       lines: { create: lineData },
     },
+    omit: { pdfData: true },
     include: { lines: true, customer: true },
   })
 
