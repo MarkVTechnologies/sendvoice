@@ -48,6 +48,7 @@ export type Invoice = {
   currency: string
   createdAt: string
   pdfUrl: string | null
+  hostedUrl: string | null
   customer: { name: string; whatsapp: string | null }
 }
 

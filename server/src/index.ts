@@ -5,6 +5,7 @@ import jwt from '@fastify/jwt'
 import authRoutes from './routes/auth.js'
 import invoiceRoutes from './routes/invoices.js'
 import webhookRoutes from './routes/webhooks.js'
+import hostedRoutes from './routes/hosted.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -32,6 +33,7 @@ app.get('/api/health', async () => ({ ok: true }))
 await app.register(authRoutes, { prefix: '/api' })
 await app.register(invoiceRoutes, { prefix: '/api' })
 await app.register(webhookRoutes, { prefix: '/api' })
+await app.register(hostedRoutes) // public, unauthenticated — not under /api
 
 const port = Number(process.env.PORT ?? 4000)
 app.listen({ port, host: '0.0.0.0' }).catch((err) => {

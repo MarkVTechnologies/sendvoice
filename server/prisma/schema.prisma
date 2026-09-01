@@ -177,6 +177,14 @@ model Document {
   // anyway once the hosted invoice page and WhatsApp document headers want
   // a public, unauthenticated URL).
   pdfData        Bytes?
+  // PRD §12 P0: hosted invoice URLs are bearer tokens for financial data —
+  // high-entropy, never sequential/guessable, expiring, revocable. Revoking
+  // today means clearing hostedToken; a documented reason/log is remaining
+  // work. Resolved by the public hosted-page route via a SECURITY DEFINER
+  // function (resolve_document_by_token), the same pattern as login — this
+  // is the one other legitimate cross-tenant lookup in the app.
+  hostedToken           String?   @unique
+  hostedTokenExpiresAt  DateTime?
   approvedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

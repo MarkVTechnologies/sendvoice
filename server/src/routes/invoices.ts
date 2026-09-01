@@ -4,6 +4,12 @@ import { withTenant } from '../lib/prisma.js'
 import { approveInvoice } from '../services/invoices.js'
 import { renderAndStorePdf } from '../services/pdf.js'
 
+// Needs to be a real absolute URL — it goes into a wa.me pre-filled message
+// (Rail A), not just a client-side fetch. Defaults to localhost for dev;
+// production must set this to the server's real public origin.
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? `http://localhost:${process.env.PORT ?? 4177}`
+const hostedUrl = (token: string | null) => (token ? `${PUBLIC_BASE_URL}/i/${token}` : null)
+
 const approveSchema = z.object({
   customer: z.object({
     name: z.string().min(1),
@@ -34,16 +40,19 @@ const approveSchema = z.object({
 export default async function invoiceRoutes(app: FastifyInstance) {
   app.get('/invoices', { preHandler: app.authenticate }, async (req) => {
     const { tenantId } = req.user as { tenantId: string }
-    return withTenant(tenantId, (tx) =>
+    const docs = await withTenant(tenantId, (tx) =>
       tx.document.findMany({
         where: { tenantId },
-        // Excludes pdfData explicitly — Prisma's default field set would
-        // otherwise ship the full PDF bytes as JSON on every list call.
+        // pdfData excluded — Prisma's default field set would otherwise
+        // ship the full PDF bytes as JSON on every list call.
         omit: { pdfData: true },
         include: { customer: true },
         orderBy: { createdAt: 'desc' },
       }),
     )
+    // hostedToken is the bearer credential for the public page — the client
+    // gets the constructed hostedUrl, never the raw token in a response.
+    return docs.map(({ hostedToken, ...d }) => ({ ...d, hostedUrl: hostedUrl(hostedToken) }))
   })
 
   // draftId is a client-side correlation id only — there is no server-side
@@ -62,7 +71,12 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     // and is numbered even if rendering below were to fail.
     await renderAndStorePdf(tenantId, document.id)
 
-    return reply.send({ ...document, pdfUrl: `/api/invoices/${document.id}/pdf` })
+    const { hostedToken, ...rest } = document
+    return reply.send({
+      ...rest,
+      pdfUrl: `/api/invoices/${document.id}/pdf`,
+      hostedUrl: hostedUrl(hostedToken),
+    })
   })
 
   app.get('/invoices/:id/pdf', { preHandler: app.authenticate }, async (req, reply) => {

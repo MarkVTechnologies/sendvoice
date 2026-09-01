@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { api, ApiError, type Invoice } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { enqueue } from '../lib/outbox'
+import { buildWhatsAppSendLink } from '../lib/whatsapp'
 
 type Line = { id: string; description: string; qty: number; rate: number }
 
@@ -65,9 +66,15 @@ export default function Composer() {
       const invoice = await api.approveInvoice(draftId, payload)
       setSentInvoice(invoice)
       setStatus('sent')
-      // Rail A (PRD §10, §6.1): open a wa.me deep link with the invoice
-      // pre-filled, once there's a hosted invoice page to link to. Tracked
-      // as a remaining Phase 0 item — approval alone is the milestone here.
+      // Rail A (PRD §6.1 J1): "Approve & Send" means WhatsApp opens with the
+      // message pre-filled right away — the merchant's last step is tapping
+      // send inside WhatsApp, not a separate click in our app. window.open
+      // here (still inside the same click handler's async chain) generally
+      // survives popup blockers; the Sent screen below keeps a manual
+      // button as a fallback in case it doesn't.
+      if (invoice.customer.whatsapp && invoice.hostedUrl) {
+        window.open(buildWhatsAppSendLink(invoice.customer.whatsapp, invoice.number, invoice.hostedUrl), '_blank')
+      }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         clearSession()
@@ -86,6 +93,19 @@ export default function Composer() {
         <p className="text-neutral-600">
           {sentInvoice.currency} {sentInvoice.total} to {sentInvoice.customer.name}
         </p>
+        {sentInvoice.customer.whatsapp && sentInvoice.hostedUrl && (
+          <button
+            className="rounded bg-emerald-600 px-4 py-2 text-white"
+            onClick={() =>
+              window.open(
+                buildWhatsAppSendLink(sentInvoice.customer.whatsapp!, sentInvoice.number, sentInvoice.hostedUrl!),
+                '_blank',
+              )
+            }
+          >
+            Open WhatsApp
+          </button>
+        )}
         {sentInvoice.pdfUrl && (
           <button
             className="rounded border px-4 py-2"
