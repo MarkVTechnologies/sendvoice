@@ -56,7 +56,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:4000',
+        // 4000 is contested by another local project on this machine —
+        // moved off it to avoid random cross-project port collisions.
+        target: 'http://localhost:4177',
         changeOrigin: true,
       },
     },

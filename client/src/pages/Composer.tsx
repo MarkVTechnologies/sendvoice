@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { api, ApiError, type Invoice } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import { enqueue } from '../lib/outbox'
 
 type Line = { id: string; description: string; qty: number; rate: number }
@@ -7,15 +9,19 @@ type Line = { id: string; description: string; qty: number; rate: number }
  * PRD 6.1 (J1): the app lands here, not on a dashboard. Inline numeric
  * keypad entry, live running total, real PDF preview before Approve & Send.
  * Invoice numbers are assigned server-side at approval (PRD 9.4) — this
- * screen only ever holds a draft.
+ * screen only ever holds a draft; the total shown here is a preview, not
+ * the number of record (the server recomputes it on approve).
  */
 export default function Composer() {
+  const clearSession = useAuth((s) => s.clear)
   const [customerName, setCustomerName] = useState('')
   const [customerWhatsapp, setCustomerWhatsapp] = useState('')
   const [lines, setLines] = useState<Line[]>([
     { id: crypto.randomUUID(), description: '', qty: 1, rate: 0 },
   ])
-  const [status, setStatus] = useState<'idle' | 'queued' | 'sent'>('idle')
+  const [status, setStatus] = useState<'idle' | 'sending' | 'queued' | 'sent' | 'error'>('idle')
+  const [sentInvoice, setSentInvoice] = useState<Invoice | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const total = useMemo(
     () => lines.reduce((sum, l) => sum + l.qty * l.rate, 0),
@@ -30,16 +36,61 @@ export default function Composer() {
     setLines((prev) => [...prev, { id: crypto.randomUUID(), description: '', qty: 1, rate: 0 }])
   }
 
+  function resetDraft() {
+    setCustomerName('')
+    setCustomerWhatsapp('')
+    setLines([{ id: crypto.randomUUID(), description: '', qty: 1, rate: 0 }])
+    setStatus('idle')
+    setSentInvoice(null)
+  }
+
   async function approveAndSend() {
     const draftId = crypto.randomUUID()
+    const payload = {
+      customer: { name: customerName, whatsapp: customerWhatsapp },
+      lines: lines
+        .filter((l) => l.description)
+        .map((l) => ({ description: l.description, qty: l.qty, rate: l.rate })),
+    }
+
     if (!navigator.onLine) {
-      await enqueue({ id: draftId, kind: 'approve-invoice', payload: { customerName, customerWhatsapp, lines } })
+      await enqueue({ id: draftId, kind: 'approve-invoice', payload })
       setStatus('queued')
       return
     }
-    // TODO(Phase 0): call api.approveInvoice, then open Rail A deep link
-    // (wa.me/<number>?text=<prefilled message + hosted invoice link>).
-    setStatus('sent')
+
+    setStatus('sending')
+    setError(null)
+    try {
+      const invoice = await api.approveInvoice(draftId, payload)
+      setSentInvoice(invoice)
+      setStatus('sent')
+      // Rail A (PRD §10, §6.1): open a wa.me deep link with the invoice
+      // pre-filled, once there's a hosted invoice page to link to. Tracked
+      // as a remaining Phase 0 item — approval alone is the milestone here.
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        clearSession()
+        return
+      }
+      setError("Couldn't reach the server. If you're offline this will queue automatically.")
+      setStatus('error')
+    }
+  }
+
+  if (status === 'sent' && sentInvoice) {
+    return (
+      <div className="mx-auto flex max-w-lg flex-col gap-4 p-6 text-center">
+        <h1 className="text-xl font-semibold text-emerald-700">Sent</h1>
+        <p className="text-3xl font-semibold">{sentInvoice.number}</p>
+        <p className="text-neutral-600">
+          {sentInvoice.currency} {sentInvoice.total} to {sentInvoice.customer.name}
+        </p>
+        <button className="mt-4 rounded border px-4 py-2" onClick={resetDraft}>
+          New invoice
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -99,15 +150,17 @@ export default function Composer() {
       <button
         className="rounded bg-emerald-700 px-4 py-3 text-white disabled:opacity-50"
         onClick={approveAndSend}
-        disabled={!customerWhatsapp || lines.every((l) => !l.description)}
+        disabled={
+          status === 'sending' || !customerWhatsapp || lines.every((l) => !l.description)
+        }
       >
-        Approve &amp; Send
+        {status === 'sending' ? 'Sending…' : 'Approve & Send'}
       </button>
 
       {status === 'queued' && (
         <p className="text-sm text-amber-700">Queued — will send when you&apos;re back online.</p>
       )}
-      {status === 'sent' && <p className="text-sm text-emerald-700">Sent.</p>}
+      {status === 'error' && error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   )
 }

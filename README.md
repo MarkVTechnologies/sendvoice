@@ -34,17 +34,23 @@ Put the owner connection string in `MIGRATE_DATABASE_URL` and the `sendvoice_app
 
 ```
 npx prisma generate
-npm run dev             # http://localhost:4000
+npm run dev             # http://localhost:4177
 ```
+
+Port is `4177`, not the more obvious `4000` — on a shared dev machine `4000` is a common default other projects also reach for, and cross-project port collisions there are a real thing we hit. Change `PORT` in `.env` if you need to.
 
 ### Client
 
 ```
 cd client
 npm install
-npm run dev              # http://localhost:5173, proxies /api to :4000
+npm run dev              # http://localhost:5173, proxies /api to :4177
 ```
+
+Sign-up/login is real (OTP → JWT, stored in localStorage): with no BSP wired up yet (Phase 2), `/auth/otp/request` returns the code directly in the response outside production (`devCode`) and the onboarding screen surfaces it — that's dev-only and must not ship.
 
 ## Status
 
-Phase 0 scaffold only: PWA shell (manifest, service worker, offline-first IndexedDB outbox), invoice composer UI, Fastify API skeleton, Prisma data model, and the invoice-numbering + tenant-isolation patterns the rest of the product depends on. No business logic, WhatsApp integration, or payment integration is wired up yet — see the plan's Phase 0 checklist for what's next.
+Phase 0, in progress. Working end-to-end today: signup (phone → OTP → Tenant/User created) → invoice composer → approval (real allocated number, server-computed total, inline customer creation with WhatsApp dedup) → dashboard (real outstanding total, real invoice list). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.
+
+Not yet built: real OTP delivery over WhatsApp (needs a BSP — Phase 2), PDF rendering, the hosted invoice page, Rail A/B delivery, payments, and full onboarding (logo, currency/country auto-detect, tax setting). See [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) for the complete checklist.

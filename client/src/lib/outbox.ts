@@ -15,14 +15,16 @@ export async function enqueue(entry: {
   await db.put('outbox', { ...entry, createdAt: new Date().toISOString(), attempts: 0 })
 }
 
-export async function flushOutbox(send: (kind: string, payload: unknown) => Promise<void>) {
+export async function flushOutbox(
+  send: (entry: { id: string; kind: string; payload: unknown }) => Promise<void>,
+) {
   if (!navigator.onLine) return
   const db = await getDB()
   const tx = db.transaction('outbox', 'readwrite')
   const all = await tx.store.getAll()
   for (const entry of all) {
     try {
-      await send(entry.kind, entry.payload)
+      await send(entry)
       await tx.store.delete(entry.id)
     } catch {
       entry.attempts += 1
