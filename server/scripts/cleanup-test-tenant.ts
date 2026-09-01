@@ -9,6 +9,15 @@ if (!tenantId) {
 
 async function main() {
   await withTenant(tenantId, async (tx) => {
+    const documentIds = (await tx.document.findMany({ where: { tenantId }, select: { id: true } })).map(
+      (d) => d.id,
+    )
+    await tx.documentEvent.deleteMany({ where: { documentId: { in: documentIds } } })
+    await tx.delivery.deleteMany({ where: { documentId: { in: documentIds } } })
+    await tx.payment.deleteMany({ where: { documentId: { in: documentIds } } })
+    await tx.documentLine.deleteMany({ where: { documentId: { in: documentIds } } })
+    await tx.document.deleteMany({ where: { tenantId } })
+    await tx.customer.deleteMany({ where: { tenantId } })
     await tx.user.deleteMany({ where: { tenantId } })
     await tx.numberSeries.deleteMany({ where: { tenantId } })
     await tx.tenant.delete({ where: { id: tenantId } })

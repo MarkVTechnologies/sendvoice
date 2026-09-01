@@ -115,7 +115,10 @@ model Customer {
   documents Document[]
 
   @@index([tenantId])
-  @@index([tenantId, whatsapp])
+  // PRD §8.2 P1 "duplicate detection on number": enforced here rather than
+  // as an app-level check. Nulls are distinct under Postgres uniqueness, so
+  // customers without a WhatsApp number never collide.
+  @@unique([tenantId, whatsapp])
 }
 
 // Per-series, per-year sequential counters — PRD §9.4. Numbers are only

@@ -47,11 +47,13 @@ Scaffolded this session:
 - [x] Live Postgres (Neon) + Redis (Upstash) provisioned, migrations applied, RLS verified against real cross-tenant reads/writes
 
 - [x] OTP verify → real Tenant/User upsert → JWT with `{userId, tenantId, phone}`, exercised end-to-end against Neon (login path confirmed to resolve the *same* identity on a second sign-in, not create a duplicate)
+- [x] `/invoices/:draftId/approve` creates a real, numbered `Document` + `DocumentLine`s (not just a number) — server computes totals from the submitted lines rather than trusting a client-supplied figure, inline customer creation dedupes on `(tenantId, whatsapp)` (a repeat customer's second invoice reuses the same `Customer` row and keeps the original name, PRD §8.2 P1). Exercised end-to-end: two invoices for one customer produced `INV-2026-0001`/`-0002`, correct totals, correct dedup, and `GET /invoices` returns both, tenant-isolated by RLS
 
 Remaining before the exit gate:
 - [ ] Real OTP delivery (WhatsApp utility template + SMS fallback) — currently logs the code server-side since no BSP is wired up yet (Open Decision #1); `/auth/otp/request` is not safe to expose publicly until that lands
 - [ ] Onboarding → composer flow wired to the API (business profile, currency/country auto-detect, tax setting)
-- [ ] Draft persistence: local ULID drafts in IndexedDB, server-side draft staging so `approve` can load line items instead of trusting the request body
+- [ ] Draft persistence: local ULID drafts in IndexedDB, server-side draft staging so a merchant's approval can survive a lost connection mid-request (today the full draft payload travels in the approve request body — fine online, not yet offline-safe)
+- [ ] Tax computation: `taxTotal` is hardcoded to 0 until a tenant has a configured, versioned `TaxProfile` to pin the invoice to (PRD §7.4) — computing a number without one would be a guess presented as a real figure on a financial document
 - [ ] PDF render pipeline: headless-browser template → object storage, 3–4 template designs (PRD §8.5)
 - [ ] Rail A delivery: `wa.me` deep link + Web Share Target, pre-filled message with hosted invoice link
 - [ ] Hosted invoice page: separate, server-rendered, ≤60KB critical path, works with JS disabled, tokenised/expiring URL (this is **not** part of the client SPA — build as a lean server-rendered route)
@@ -133,6 +135,6 @@ TTFI (signup → first send), session-1 activation rate, week-4 retention, Whats
 
 ## 6. What this session scaffolded vs. what's still design work
 
-**Scaffolded and verified working, against a live database:** client PWA (builds, type-checks, 76KB gzip JS); server API (type-checks, boots, health check responds); Prisma schema migrated onto Neon Postgres; RLS policies applied and confirmed to actually isolate tenants (a cross-tenant read returns zero rows, not an error and not everything); full auth flow exercised end-to-end — request OTP → verify → Tenant+User created → JWT issued → invoice number allocated (`INV-2026-0001`); a second login for the same phone correctly resolves the existing identity instead of creating a duplicate tenant.
+**Scaffolded and verified working, against a live database:** client PWA (builds, type-checks, 76KB gzip JS); server API (type-checks, boots, health check responds); Prisma schema migrated onto Neon Postgres; RLS policies applied and confirmed to actually isolate tenants (a cross-tenant read returns zero rows, not an error and not everything); the full golden path from signup through a real invoice — request OTP → verify → Tenant+User created → JWT issued → invoice approved with server-computed totals, a real allocated number, and an inline-deduped customer. Ran it twice for the same customer: `INV-2026-0001` (₦35,000) and `INV-2026-0002` (₦10,000), same `Customer` row both times, `GET /invoices` lists both.
 
-**Deliberately not built yet** (these are Phase 0 remaining-work items above, not oversights): real OTP delivery (currently server-logs the code — no BSP wired up), PDF rendering, hosted invoice page, any WhatsApp or payment integration, the onboarding→composer wiring, and the draft-staging table the approve endpoint needs instead of trusting client-submitted totals.
+**Deliberately not built yet** (these are Phase 0 remaining-work items above, not oversights): real OTP delivery (currently server-logs the code — no BSP wired up), tax computation (no `TaxProfile` wired to onboarding yet, so `taxTotal` is 0 rather than a guess), PDF rendering, hosted invoice page, any WhatsApp or payment integration, the onboarding→composer wiring, and offline-safe draft staging.
