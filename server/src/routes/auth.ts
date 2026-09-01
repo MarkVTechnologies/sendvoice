@@ -8,6 +8,15 @@ const verifyOtpSchema = z.object({
   phone: z.string().min(6),
   code: z.string().length(6),
   businessName: z.string().min(1).optional(),
+  country: z.string().length(2).optional(),
+  currency: z.string().length(3).optional(),
+  // "I don't charge tax" (PRD §6.1 J1) is the default when this is omitted.
+  tax: z
+    .discriminatedUnion('mode', [
+      z.object({ mode: z.literal('none') }),
+      z.object({ mode: z.literal('exclusive'), ratePercent: z.number().min(0).max(100) }),
+    ])
+    .optional(),
 })
 
 /**
@@ -30,14 +39,19 @@ export default async function authRoutes(app: FastifyInstance) {
   })
 
   app.post('/auth/otp/verify', async (req, reply) => {
-    const { phone, code, businessName } = verifyOtpSchema.parse(req.body)
+    const { phone, code, businessName, country, currency, tax } = verifyOtpSchema.parse(req.body)
 
     const ok = await verifyOtp(phone, code)
     if (!ok) {
       return reply.code(401).send({ error: 'invalid_or_expired_code' })
     }
 
-    const identity = await resolveOrCreateIdentity(phone, businessName)
+    const identity = await resolveOrCreateIdentity(phone, {
+      businessName,
+      country,
+      currency,
+      taxRules: tax,
+    })
     const token = await reply.jwtSign(identity)
     return reply.send({ token })
   })

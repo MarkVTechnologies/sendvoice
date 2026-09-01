@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { PrismaClient } from '@prisma/client'
 import { allocateNumber } from './numbering.js'
+import { computeTax, type TaxRules } from './tax.js'
 
 // PRD §12 P0: high-entropy, unguessable — 24 bytes is 192 bits, plenty.
 // 90-day default expiry; "configurable window" is remaining work.
@@ -63,15 +64,19 @@ export async function approveInvoice(tx: PrismaClient, tenantId: string, input: 
     }
   })
 
-  // No tax profile is wired up to onboarding yet (PRD §7.4) — taxTotal is
-  // deliberately 0 until a tenant has a configured, versioned profile to pin
-  // this invoice to. Computing a tax figure without one would be a guess
-  // presented as a real number on a financial document.
-  const taxTotal = 0
+  // PRD §7.4: pin to whichever TaxProfile is the tenant's default right now
+  // — never recompute against a *changed* profile later. Every tenant gets
+  // one at signup (services/auth.ts), including an explicit "no tax" one,
+  // so this should always find a row; falling back to 'none' only covers
+  // tenants that predate this (or a future admin-only path that skips it).
+  const taxProfile = await tx.taxProfile.findFirst({ where: { tenantId, isDefault: true } })
+  const taxRules: TaxRules = (taxProfile?.rules as TaxRules | undefined) ?? { mode: 'none' }
+  const taxTotal = computeTax(taxRules, subtotal)
   const total = subtotal + taxTotal
 
   const year = new Date().getFullYear()
   const number = await allocateNumber(tx, tenantId, 'INVOICE', 'INV', year)
+  const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { currency: true } })
 
   const document = await tx.document.create({
     data: {
@@ -80,7 +85,9 @@ export async function approveInvoice(tx: PrismaClient, tenantId: string, input: 
       docType: 'INVOICE',
       number,
       status: 'APPROVED',
-      currency: input.currency ?? 'NGN',
+      currency: input.currency ?? tenant.currency,
+      taxProfileId: taxProfile?.id,
+      taxProfileVersion: taxProfile?.version,
       issueDate: new Date(),
       dueDate: input.dueDate ? new Date(input.dueDate) : undefined,
       notes: input.notes,

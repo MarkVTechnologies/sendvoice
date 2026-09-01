@@ -55,8 +55,10 @@ Sign-up/login is real (OTP → JWT, stored in localStorage): with no BSP wired u
 
 Approving an invoice opens WhatsApp automatically with the invoice pre-filled (Rail A) — the link inside points at a public hosted page (`GET /i/:token`, no login) served directly by the server, not the client SPA.
 
+Onboarding collects country (real auto-detect via `Intl.Locale`), currency, and a tax setting — "I don't charge tax" is the default, first-class option. A merchant who charges tax gets a real computed total, not a guess: approval pins the invoice to a versioned `TaxProfile`.
+
 ## Status
 
-Phase 0, in progress. Working end-to-end today: signup (phone → OTP → Tenant/User created) → invoice composer → approval (real allocated number, server-computed total, inline customer creation with WhatsApp dedup, a real rendered PDF) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.
+Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, country/currency, tax setting) → invoice composer → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.
 
-Not yet built: real OTP delivery over WhatsApp (needs a BSP — Phase 2), Pay Now on the hosted page (needs Phase 1's payment integration), Rail B, real object storage for PDFs (currently in Postgres), and full onboarding (logo, currency/country auto-detect, tax setting). See [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) for the complete checklist.
+Not yet built: real OTP delivery over WhatsApp (needs a BSP — Phase 2), logo upload, tax modes beyond none/single-rate-exclusive, Pay Now on the hosted page (needs Phase 1's payment integration), Rail B, and real object storage for PDFs (currently in Postgres). See [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) for the complete checklist.

@@ -33,6 +33,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export type TaxChoice = { mode: 'none' } | { mode: 'exclusive'; ratePercent: number }
+
+export type OnboardingDetails = {
+  businessName?: string
+  country?: string
+  currency?: string
+  tax?: TaxChoice
+}
+
 export type ApproveInvoicePayload = {
   customer: { name: string; whatsapp: string }
   lines: Array<{ description: string; qty?: number; unit?: string; rate: number }>
@@ -58,10 +67,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ phone }),
     }),
-  verifyOtp: (phone: string, code: string, businessName?: string) =>
+  verifyOtp: (phone: string, code: string, onboarding?: OnboardingDetails) =>
     request<{ token: string }>('/auth/otp/verify', {
       method: 'POST',
-      body: JSON.stringify({ phone, code, businessName }),
+      body: JSON.stringify({ phone, code, ...onboarding }),
     }),
   approveInvoice: (draftId: string, payload: ApproveInvoicePayload) =>
     request<Invoice>(`/invoices/${draftId}/approve`, {
