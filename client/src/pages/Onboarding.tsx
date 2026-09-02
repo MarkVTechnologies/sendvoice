@@ -4,13 +4,25 @@ import { api, ApiError, type TaxChoice } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { COUNTRY_DEFAULTS, detectCountry } from '../lib/countries'
 
+// 1MB raw, well under the server's ~2.6MB decoded cap — this file also
+// gets inlined into the hosted invoice page, which has its own ≤60KB
+// budget (PRD §9.1), so smaller than the server allows is deliberate.
+const MAX_LOGO_BYTES = 1_000_000
+const ACCEPTED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve((reader.result as string).split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 /**
  * PRD 6.1 (J1): phone + WhatsApp OTP, then one screen — business name,
  * logo (skippable), currency/country (auto-detected), tax setting
  * ("I don't charge tax" is first-class). No email, no password.
- *
- * Logo upload is still skipped entirely (remaining work) — everything else
- * from the PRD's single onboarding screen is here.
  */
 export default function Onboarding() {
   const navigate = useNavigate()
@@ -26,9 +38,31 @@ export default function Onboarding() {
   const [taxRate, setTaxRate] = useState<number | ''>(
     COUNTRY_DEFAULTS[detectCountry()].suggestedRatePercent ?? '',
   )
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [logoError, setLogoError] = useState<string | null>(null)
   const [devCode, setDevCode] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+
+  function selectLogo(file: File | null) {
+    setLogoError(null)
+    if (!file) {
+      setLogoFile(null)
+      setLogoPreview(null)
+      return
+    }
+    if (!ACCEPTED_LOGO_TYPES.includes(file.type)) {
+      setLogoError('Use a PNG, JPEG, or WebP image.')
+      return
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      setLogoError('That image is too large — under 1MB, please.')
+      return
+    }
+    setLogoFile(file)
+    setLogoPreview(URL.createObjectURL(file))
+  }
 
   function selectCountry(code: string) {
     setCountry(code)
@@ -64,11 +98,15 @@ export default function Onboarding() {
       ? { mode: 'none' }
       : { mode: 'exclusive', ratePercent: taxRate === '' ? 0 : taxRate }
     try {
+      const logo = logoFile
+        ? { dataBase64: await readFileAsBase64(logoFile), mimeType: logoFile.type }
+        : undefined
       const { token } = await api.verifyOtp(phone, code, {
         businessName: businessName || undefined,
         country,
         currency,
         tax,
+        logo,
       })
       setSession(token, phone)
       navigate('/')
@@ -141,6 +179,22 @@ export default function Onboarding() {
               onChange={(e) => setBusinessName(e.target.value)}
             />
           </label>
+
+          <div className="flex items-center gap-3">
+            {logoPreview && (
+              <img src={logoPreview} alt="Logo preview" className="h-12 w-12 rounded border object-contain" />
+            )}
+            <label className="flex-1 text-sm">
+              Logo <span className="text-neutral-500">(optional)</span>
+              <input
+                className="mt-1 block w-full text-sm"
+                type="file"
+                accept={ACCEPTED_LOGO_TYPES.join(',')}
+                onChange={(e) => selectLogo(e.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
+          {logoError && <p className="text-sm text-red-600">{logoError}</p>}
 
           <div className="grid grid-cols-2 gap-3">
             <label className="flex flex-col gap-1 text-sm">

@@ -1,4 +1,5 @@
 import type { Customer, Document, DocumentLine, Tenant } from '@prisma/client'
+import { tenantLogoDataUri } from './logo.js'
 
 type InvoiceData = Document & {
   lines: DocumentLine[]
@@ -35,6 +36,12 @@ function formatDate(d: Date | null): string {
 export function renderHostedInvoicePage(doc: InvoiceData): string {
   const businessName = escapeHtml(doc.tenant.tradingName || doc.tenant.legalName)
   const balance = Number(doc.total) - Number(doc.amountPaid)
+  // Trades against the ≤60KB critical-path budget above for tenants with a
+  // logo — inlined the same way as the PDF (no separate serving route to
+  // maintain), but unlike the PDF this page's budget actually cares. Worth
+  // revisiting (real object storage + a plain <img src>) if logos turn out
+  // to push real pages over budget.
+  const logoDataUri = tenantLogoDataUri(doc.tenant)
 
   const rows = doc.lines
     .sort((a, b) => a.position - b.position)
@@ -69,7 +76,8 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
   }
   .wrap { max-width: 560px; margin: 0 auto; padding: 24px 20px 48px; }
   .card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -12px rgba(0,0,0,0.15); }
-  .business { font-size: 15px; color: #555; margin-bottom: 2px; }
+  .business { display: flex; align-items: center; gap: 10px; font-size: 15px; color: #555; margin-bottom: 2px; }
+  .business img { max-height: 32px; max-width: 100px; object-fit: contain; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .status {
     display: inline-block;
@@ -123,7 +131,7 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
 <body>
   <div class="wrap">
     <div class="card">
-      <div class="business">${businessName}</div>
+      <div class="business">${logoDataUri ? `<img src="${logoDataUri}" alt="" />` : ''}${businessName}</div>
       <h1>${doc.number ?? 'Invoice'}</h1>
       <span class="status">${escapeHtml(doc.status)}</span>
 

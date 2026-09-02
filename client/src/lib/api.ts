@@ -40,6 +40,7 @@ export type OnboardingDetails = {
   country?: string
   currency?: string
   tax?: TaxChoice
+  logo?: { dataBase64: string; mimeType: string }
 }
 
 export type ApproveInvoicePayload = {

@@ -1,4 +1,5 @@
 import type { Customer, Document, DocumentLine, Tenant } from '@prisma/client'
+import { tenantLogoDataUri } from '../logo.js'
 
 type InvoiceData = Document & {
   lines: DocumentLine[]
@@ -32,6 +33,7 @@ function formatDate(d: Date | null): string {
  */
 export function renderInvoiceHtml(doc: InvoiceData): string {
   const balance = Number(doc.total) - Number(doc.amountPaid)
+  const logoDataUri = tenantLogoDataUri(doc.tenant)
 
   const rows = doc.lines
     .sort((a, b) => a.position - b.position)
@@ -66,6 +68,8 @@ export function renderInvoiceHtml(doc: InvoiceData): string {
     line-height: 1.5;
   }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; }
+  .business { display: flex; align-items: center; gap: 14px; }
+  .business img { max-height: 48px; max-width: 140px; object-fit: contain; }
   .business h1 { font-size: 20px; margin: 0 0 4px; }
   .business .meta { color: #555; font-size: 12px; }
   .doc-type { text-align: right; }
@@ -104,11 +108,14 @@ export function renderInvoiceHtml(doc: InvoiceData): string {
 <body>
   <div class="header">
     <div class="business">
-      <h1>${escapeHtml(doc.tenant.tradingName || doc.tenant.legalName)}</h1>
-      <div class="meta">
-        ${/* No business address field on Tenant yet — full onboarding
-             (PRD §6.1) is remaining work; tax ID is what's collectible today. */ ''}
-        ${doc.tenant.taxId ? `Tax ID: ${escapeHtml(doc.tenant.taxId)}` : ''}
+      ${logoDataUri ? `<img src="${logoDataUri}" alt="" />` : ''}
+      <div>
+        <h1>${escapeHtml(doc.tenant.tradingName || doc.tenant.legalName)}</h1>
+        <div class="meta">
+          ${/* No business address field on Tenant yet — full onboarding
+               (PRD §6.1) is remaining work; tax ID is what's collectible today. */ ''}
+          ${doc.tenant.taxId ? `Tax ID: ${escapeHtml(doc.tenant.taxId)}` : ''}
+        </div>
       </div>
     </div>
     <div class="doc-type">

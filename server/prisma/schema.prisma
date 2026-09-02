@@ -74,7 +74,14 @@ model Tenant {
   country     String // ISO 3166-1 alpha-2 — keys tax profile + payment routing
   currency    String // ISO 4217
   taxId       String?
-  logoUrl     String?
+  logoUrl     String? // unused for now — see logoData
+  // PRD §6.1: onboarding's "logo (optional, skippable)". Stored inline
+  // (like Document.pdfData) rather than served from a URL — both the PDF
+  // and the hosted page are rendered server-side with the full Tenant
+  // already in hand, so embedding a data: URI at render time needs no
+  // separate public serving route at all.
+  logoData     Bytes?
+  logoMimeType String?
   createdAt   DateTime @default(now())
 
   users         User[]

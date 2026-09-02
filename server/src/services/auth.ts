@@ -9,6 +9,7 @@ export type OnboardingInput = {
   country?: string
   currency?: string
   taxRules?: TaxRules
+  logo?: { data: Buffer; mimeType: string }
 }
 
 /**
@@ -48,6 +49,8 @@ export async function resolveOrCreateIdentity(phone: string, input: OnboardingIn
         legalName: input.businessName?.trim() || 'My Business',
         country,
         currency,
+        logoData: input.logo ? new Uint8Array(input.logo.data) : undefined,
+        logoMimeType: input.logo?.mimeType,
       },
     })
     await tx.user.create({

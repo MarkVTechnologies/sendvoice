@@ -17,6 +17,16 @@ const verifyOtpSchema = z.object({
       z.object({ mode: z.literal('exclusive'), ratePercent: z.number().min(0).max(100) }),
     ])
     .optional(),
+  // PRD §6.1: "logo (optional, skippable)". Base64 in the same JSON body
+  // rather than multipart — simple, and fine for something logo-sized.
+  // ~3.5M base64 chars is a blunt P0 sanity cap (~2.6MB decoded), not a
+  // tuned production limit.
+  logo: z
+    .object({
+      dataBase64: z.string().max(3_500_000),
+      mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
+    })
+    .optional(),
 })
 
 /**
@@ -39,7 +49,7 @@ export default async function authRoutes(app: FastifyInstance) {
   })
 
   app.post('/auth/otp/verify', async (req, reply) => {
-    const { phone, code, businessName, country, currency, tax } = verifyOtpSchema.parse(req.body)
+    const { phone, code, businessName, country, currency, tax, logo } = verifyOtpSchema.parse(req.body)
 
     const ok = await verifyOtp(phone, code)
     if (!ok) {
@@ -51,6 +61,7 @@ export default async function authRoutes(app: FastifyInstance) {
       country,
       currency,
       taxRules: tax,
+      logo: logo ? { data: Buffer.from(logo.dataBase64, 'base64'), mimeType: logo.mimeType } : undefined,
     })
     const token = await reply.jwtSign(identity)
     return reply.send({ token })
