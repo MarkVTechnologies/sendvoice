@@ -31,8 +31,26 @@ export type ApproveInvoiceInput = {
  *
  * PRD §8.2 P0: customers are created inline during invoicing, never a
  * separate "add customer first" step — find-by-WhatsApp-number or create.
+ *
+ * Idempotent by (tenantId, draftId): a retried approve request — a flaky
+ * connection, our own outbox flush retrying after a timeout — must return
+ * the invoice already created, never mint a second one. The caller
+ * (routes/invoices.ts) uses `created` to skip re-rendering the PDF on a
+ * replay.
  */
-export async function approveInvoice(tx: PrismaClient, tenantId: string, input: ApproveInvoiceInput) {
+export async function approveInvoice(
+  tx: PrismaClient,
+  tenantId: string,
+  draftId: string,
+  input: ApproveInvoiceInput,
+) {
+  const existing = await tx.document.findUnique({
+    where: { tenantId_draftId: { tenantId, draftId } },
+    omit: { pdfData: true },
+    include: { lines: true, customer: true },
+  })
+  if (existing) return { document: existing, created: false }
+
   const customer = input.customer.whatsapp
     ? await tx.customer.upsert({
         where: { tenantId_whatsapp: { tenantId, whatsapp: input.customer.whatsapp } },
@@ -81,6 +99,7 @@ export async function approveInvoice(tx: PrismaClient, tenantId: string, input: 
   const document = await tx.document.create({
     data: {
       tenantId,
+      draftId,
       customerId: customer.id,
       docType: 'INVOICE',
       number,
@@ -107,5 +126,5 @@ export async function approveInvoice(tx: PrismaClient, tenantId: string, input: 
     data: { documentId: document.id, type: 'approved', data: { number } },
   })
 
-  return document
+  return { document, created: true }
 }

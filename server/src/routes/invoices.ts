@@ -55,21 +55,31 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     return docs.map(({ hostedToken, ...d }) => ({ ...d, hostedUrl: hostedUrl(hostedToken) }))
   })
 
-  // draftId is a client-side correlation id only — there is no server-side
-  // staged-drafts table yet (tracked in the plan), so the full draft payload
-  // travels in the request body.
+  // draftId doubles as an idempotency key (services/invoices.ts) — a
+  // retried request (flaky connection, our own outbox flush) returns the
+  // invoice already created instead of minting a second one. There is no
+  // server-side staged-drafts table yet (tracked in the plan), so the full
+  // draft payload travels in the request body every time.
   app.post('/invoices/:draftId/approve', { preHandler: app.authenticate }, async (req, reply) => {
     const { tenantId } = req.user as { tenantId: string }
+    const { draftId } = req.params as { draftId: string }
     const input = approveSchema.parse(req.body)
 
-    const document = await withTenant(tenantId, (tx) => approveInvoice(tx, tenantId, input))
+    const { document, created } = await withTenant(tenantId, (tx) =>
+      approveInvoice(tx, tenantId, draftId, input),
+    )
 
-    // PRD §8.4/§8.5 P0: a real PDF for every approved invoice. Rendered
-    // synchronously here rather than queued (PRD's own job-queue pattern)
-    // since Phase 0 has no worker process yet — a fast-follow, not a
-    // design decision to keep long-term. The invoice itself already exists
-    // and is numbered even if rendering below were to fail.
-    await renderAndStorePdf(tenantId, document.id)
+    // Only render on first creation — a replay already has a PDF (or, if
+    // rendering genuinely failed last time, retrying silently forever isn't
+    // solved by re-rendering on every duplicate request either).
+    if (created) {
+      // PRD §8.4/§8.5 P0: a real PDF for every approved invoice. Rendered
+      // synchronously here rather than queued (PRD's own job-queue pattern)
+      // since Phase 0 has no worker process yet — a fast-follow, not a
+      // design decision to keep long-term. The invoice itself already
+      // exists and is numbered even if rendering below were to fail.
+      await renderAndStorePdf(tenantId, document.id)
+    }
 
     const { hostedToken, ...rest } = document
     return reply.send({

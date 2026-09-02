@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, ApiError, type Invoice } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { enqueue } from '../lib/outbox'
 import { buildWhatsAppSendLink } from '../lib/whatsapp'
+import { deleteDraft, loadLatestDraft, saveDraft } from '../lib/drafts'
 
 type Line = { id: string; description: string; qty: number; rate: number }
+
+const AUTOSAVE_DEBOUNCE_MS = 500
 
 /**
  * PRD 6.1 (J1): the app lands here, not on a dashboard. Inline numeric
@@ -12,9 +15,15 @@ type Line = { id: string; description: string; qty: number; rate: number }
  * Invoice numbers are assigned server-side at approval (PRD 9.4) — this
  * screen only ever holds a draft; the total shown here is a preview, not
  * the number of record (the server recomputes it on approve).
+ *
+ * PRD §8.4 P0: the in-progress draft autosaves to IndexedDB (lib/drafts.ts)
+ * so a lost connection or closed tab doesn't lose a merchant's work — never
+ * the source of truth (PRD §9.1), just a local cache cleared once the
+ * server (or the outbox, PRD §9.3) actually has it.
  */
 export default function Composer() {
   const clearSession = useAuth((s) => s.clear)
+  const [draftId, setDraftId] = useState<string>(() => crypto.randomUUID())
   const [customerName, setCustomerName] = useState('')
   const [customerWhatsapp, setCustomerWhatsapp] = useState('')
   const [lines, setLines] = useState<Line[]>([
@@ -29,6 +38,33 @@ export default function Composer() {
     [lines],
   )
 
+  // Restore any in-progress draft once on mount.
+  useEffect(() => {
+    loadLatestDraft().then((draft) => {
+      if (!draft) return
+      setDraftId(draft.id)
+      setCustomerName(draft.customer.name)
+      setCustomerWhatsapp(draft.customer.whatsapp ?? '')
+      setLines(draft.lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty ?? 1, rate: l.rate })))
+    })
+  }, [])
+
+  // Debounced autosave — skip empty/trivial drafts so a merchant who never
+  // typed anything doesn't leave a meaningless row behind.
+  useEffect(() => {
+    const hasContent = customerName.trim() || customerWhatsapp.trim() || lines.some((l) => l.description.trim())
+    if (!hasContent) return
+    const timer = setTimeout(() => {
+      saveDraft({
+        id: draftId,
+        version: 1,
+        customer: { name: customerName, whatsapp: customerWhatsapp || undefined },
+        lines: lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unit: undefined, rate: l.rate })),
+      })
+    }, AUTOSAVE_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [draftId, customerName, customerWhatsapp, lines])
+
   function updateLine(id: string, patch: Partial<Line>) {
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)))
   }
@@ -38,6 +74,8 @@ export default function Composer() {
   }
 
   function resetDraft() {
+    deleteDraft(draftId)
+    setDraftId(crypto.randomUUID())
     setCustomerName('')
     setCustomerWhatsapp('')
     setLines([{ id: crypto.randomUUID(), description: '', qty: 1, rate: 0 }])
@@ -46,7 +84,6 @@ export default function Composer() {
   }
 
   async function approveAndSend() {
-    const draftId = crypto.randomUUID()
     const payload = {
       customer: { name: customerName, whatsapp: customerWhatsapp },
       lines: lines
@@ -56,6 +93,7 @@ export default function Composer() {
 
     if (!navigator.onLine) {
       await enqueue({ id: draftId, kind: 'approve-invoice', payload })
+      await deleteDraft(draftId) // now durable in the outbox instead
       setStatus('queued')
       return
     }
@@ -64,6 +102,7 @@ export default function Composer() {
     setError(null)
     try {
       const invoice = await api.approveInvoice(draftId, payload)
+      await deleteDraft(draftId)
       setSentInvoice(invoice)
       setStatus('sent')
       // Rail A (PRD §6.1 J1): "Approve & Send" means WhatsApp opens with the

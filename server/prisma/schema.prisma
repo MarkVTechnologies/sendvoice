@@ -156,6 +156,11 @@ model Document {
   tenant         Tenant    @relation(fields: [tenantId], references: [id])
   customerId     String
   customer       Customer  @relation(fields: [customerId], references: [id])
+  // Idempotency key for /invoices/:draftId/approve — a retried request
+  // (flaky connection, our own outbox flush) must never create a second
+  // invoice for one merchant action. NULL for documents created before this
+  // existed or through a future path that doesn't need it.
+  draftId        String?
   docType        DocType
   number         String? // null until approved
   status         DocStatus @default(DRAFT)
@@ -197,6 +202,7 @@ model Document {
   @@index([tenantId, status])
   @@index([tenantId, customerId])
   @@unique([tenantId, docType, number])
+  @@unique([tenantId, draftId])
 }
 
 model DocumentLine {
