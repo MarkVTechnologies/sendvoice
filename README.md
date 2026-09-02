@@ -41,7 +41,7 @@ npm run dev             # http://localhost:4177
 
 Port is `4177`, not the more obvious `4000` — on a shared dev machine `4000` is a common default other projects also reach for, and cross-project port collisions there are a real thing we hit. Change `PORT` in `.env` if you need to.
 
-PDF rendering needs Chrome installed locally (`CHROME_PATH` in `.env.example`, defaults to the standard Windows path) — see the note in `src/services/pdf.ts` for why this is a dev shortcut, not a production setup. Expect ~10s on `/invoices/:id/approve`, dominated by launching a fresh browser per request; a real deployment should keep a warm instance rather than cold-launching Chrome on every call.
+PDF rendering needs Chrome installed locally (`CHROME_PATH` in `.env.example`, defaults to the standard Windows path) — see the note in `src/services/pdf.ts` for why the launch target is a dev shortcut, not a production setup. Chrome itself is launched once and reused across requests (not relaunched per call), so only the very first `/invoices/:id/approve` after a server start pays the ~10-14s cold-launch cost; subsequent approvals measured ~7s, dominated by DB round-trips to Neon rather than the browser. A real deployment still wants a small render pool with queueing rather than a single shared instance.
 
 ### Client
 

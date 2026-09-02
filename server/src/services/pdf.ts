@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer-core'
+import puppeteer, { type Browser } from 'puppeteer-core'
 import { withTenant } from '../lib/prisma.js'
 import { renderInvoiceHtml } from './pdf/template.js'
 
@@ -18,6 +18,40 @@ const CHROME_PATH =
   process.env.CHROME_PATH ?? 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'
 
 /**
+ * One Chrome process, reused across every render, instead of launching a
+ * fresh one per request — that cold launch was ~9-10s of a ~10s total
+ * approve latency (measured directly: see DEVELOPMENT_PLAN.md's TTFI entry).
+ * Still a single-instance shortcut, not a production pool — concurrent
+ * renders serialize behind whichever request launches the browser first,
+ * but every render after the first pays only page-open + render time, not
+ * a full Chrome boot. A real deployment wants a small pool with queueing;
+ * tracked as remaining work, same as the launch-target itself (see below).
+ */
+let browserPromise: Promise<Browser> | null = null
+
+async function getBrowser(): Promise<Browser> {
+  if (browserPromise) {
+    const browser = await browserPromise
+    if (browser.connected) return browser
+    // Crashed or was closed externally since we last handed it out — fall
+    // through and relaunch rather than handing back a dead browser.
+  }
+  browserPromise = puppeteer.launch({ executablePath: CHROME_PATH, headless: true })
+  return browserPromise
+}
+
+// tsx watch (and any real process manager) sends SIGTERM/SIGINT on restart
+// or shutdown — without this, every dev-server reload leaked another
+// chrome.exe that nothing ever closes.
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.once(signal, () => {
+    void browserPromise
+      ?.then((browser) => browser.close())
+      .finally(() => process.exit(0))
+  })
+}
+
+/**
  * Deliberately two short DB transactions around the (slow, seconds-long)
  * browser render rather than one transaction spanning it — holding a
  * Postgres transaction open for however long Chrome takes to boot and
@@ -34,10 +68,10 @@ export async function renderAndStorePdf(tenantId: string, documentId: string): P
 
   const html = renderInvoiceHtml(doc)
 
-  const browser = await puppeteer.launch({ executablePath: CHROME_PATH, headless: true })
+  const browser = await getBrowser()
+  const page = await browser.newPage()
   let pdfData: Uint8Array
   try {
-    const page = await browser.newPage()
     // 'load' is enough — the HTML is fully self-contained, no external
     // requests to wait out (system fonts, no network fetches).
     await page.setContent(html, { waitUntil: 'load' })
@@ -47,7 +81,7 @@ export async function renderAndStorePdf(tenantId: string, documentId: string): P
       margin: { top: 0, bottom: 0, left: 0, right: 0 },
     })
   } finally {
-    await browser.close()
+    await page.close()
   }
 
   await withTenant(tenantId, (tx) =>
