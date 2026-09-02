@@ -63,4 +63,6 @@ The composer autosaves to IndexedDB (PRD §8.4) — a lost connection or closed 
 
 Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, logo, country/currency, tax setting) → invoice composer, autosaved → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF, idempotent by draftId) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page, logo included → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.
 
+The PRD's own Phase 0 exit gate is TTFI < 90s, so a tenant's first approval logs a real `ttfiMs` (`Tenant.createdAt` → that invoice's `approvedAt`, server-computed, only on the first invoice ever). A real browser-driven run of the full signup-to-first-send path measured 23.3s.
+
 Not yet built: real OTP delivery over WhatsApp (needs a BSP — Phase 2), tax modes beyond none/single-rate-exclusive, Pay Now on the hosted page (needs Phase 1's payment integration), Rail B, and real object storage for PDFs (currently in Postgres). See [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) for the complete checklist.

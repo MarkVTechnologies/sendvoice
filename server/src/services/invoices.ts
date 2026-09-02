@@ -51,6 +51,14 @@ export async function approveInvoice(
   })
   if (existing) return { document: existing, created: false }
 
+  // PRD §4.3 North Star: TTFI (time from signup to first invoice sent) is
+  // Phase 0's exit metric. Computed here — never client-timed — because the
+  // server already holds both ends of it (Tenant.createdAt, this approval)
+  // with no client clock, reload, or crash able to lose or skew it. Only
+  // meaningful once per tenant, so it's gated on this being their first
+  // Document ever.
+  const isFirstInvoice = (await tx.document.count({ where: { tenantId } })) === 0
+
   const customer = input.customer.whatsapp
     ? await tx.customer.upsert({
         where: { tenantId_whatsapp: { tenantId, whatsapp: input.customer.whatsapp } },
@@ -94,7 +102,10 @@ export async function approveInvoice(
 
   const year = new Date().getFullYear()
   const number = await allocateNumber(tx, tenantId, 'INVOICE', 'INV', year)
-  const tenant = await tx.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { currency: true } })
+  const tenant = await tx.tenant.findUniqueOrThrow({
+    where: { id: tenantId },
+    select: { currency: true, createdAt: true },
+  })
 
   const document = await tx.document.create({
     data: {
@@ -122,9 +133,15 @@ export async function approveInvoice(
     include: { lines: true, customer: true },
   })
 
+  const ttfiMs = isFirstInvoice ? document.approvedAt!.getTime() - tenant.createdAt.getTime() : undefined
+
   await tx.documentEvent.create({
-    data: { documentId: document.id, type: 'approved', data: { number } },
+    data: {
+      documentId: document.id,
+      type: 'approved',
+      data: ttfiMs === undefined ? { number } : { number, ttfiMs },
+    },
   })
 
-  return { document, created: true }
+  return { document, created: true, ttfiMs }
 }

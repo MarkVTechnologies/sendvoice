@@ -65,9 +65,16 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     const { draftId } = req.params as { draftId: string }
     const input = approveSchema.parse(req.body)
 
-    const { document, created } = await withTenant(tenantId, (tx) =>
+    const { document, created, ttfiMs } = await withTenant(tenantId, (tx) =>
       approveInvoice(tx, tenantId, draftId, input),
     )
+
+    // PRD §4.3 North Star / Phase 0 exit gate: log this tenant's real
+    // time-to-first-invoice so it's visible without a separate analytics
+    // pipeline. Only present on a tenant's very first invoice.
+    if (ttfiMs !== undefined) {
+      req.log.info({ tenantId, ttfiMs }, 'ttfi: time to first invoice')
+    }
 
     // Only render on first creation — a replay already has a PDF (or, if
     // rendering genuinely failed last time, retrying silently forever isn't
