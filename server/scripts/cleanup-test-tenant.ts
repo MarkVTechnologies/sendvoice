@@ -21,6 +21,7 @@ async function main() {
     await tx.user.deleteMany({ where: { tenantId } })
     await tx.numberSeries.deleteMany({ where: { tenantId } })
     await tx.taxProfile.deleteMany({ where: { tenantId } })
+    await tx.item.deleteMany({ where: { tenantId } })
     await tx.tenant.delete({ where: { id: tenantId } })
   })
   console.log('deleted tenant', tenantId)

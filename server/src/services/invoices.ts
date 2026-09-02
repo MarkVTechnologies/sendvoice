@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto'
 import type { PrismaClient } from '@prisma/client'
 import { allocateNumber } from './numbering.js'
+import { recordItemUsage } from './items.js'
 import { computeTax, type TaxRules } from './tax.js'
 
 // PRD §12 P0: high-entropy, unguessable — 24 bytes is 192 bits, plenty.
@@ -134,6 +135,8 @@ export async function approveInvoice(
   })
 
   const ttfiMs = isFirstInvoice ? document.approvedAt!.getTime() - tenant.createdAt.getTime() : undefined
+
+  await recordItemUsage(tx, tenantId, input.lines)
 
   await tx.documentEvent.create({
     data: {

@@ -27,6 +27,8 @@ alter table "NumberSeries" enable row level security;
 alter table "NumberSeries" force row level security;
 alter table "TaxProfile" enable row level security;
 alter table "TaxProfile" force row level security;
+alter table "Item" enable row level security;
+alter table "Item" force row level security;
 alter table "Document" enable row level security;
 alter table "Document" force row level security;
 alter table "DocumentLine" enable row level security;
@@ -60,6 +62,9 @@ create policy tenant_isolation on "NumberSeries"
   using ("tenantId" = current_setting('app.tenant_id', true));
 
 create policy tenant_isolation on "TaxProfile"
+  using ("tenantId" = current_setting('app.tenant_id', true));
+
+create policy tenant_isolation on "Item"
   using ("tenantId" = current_setting('app.tenant_id', true));
 
 create policy tenant_isolation on "Document"

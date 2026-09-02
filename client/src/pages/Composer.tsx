@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, ApiError, type Invoice } from '../lib/api'
+import { api, ApiError, type Invoice, type ItemSuggestion } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { enqueue } from '../lib/outbox'
 import { buildWhatsAppSendLink } from '../lib/whatsapp'
@@ -8,6 +8,11 @@ import { deleteDraft, loadLatestDraft, saveDraft } from '../lib/drafts'
 type Line = { id: string; description: string; qty: number; rate: number }
 
 const AUTOSAVE_DEBOUNCE_MS = 500
+// PRD §8.3 P1: item catalogue auto-save with fuzzy recall. Debounced
+// separately from (and shorter than) the draft autosave above — this is a
+// keystroke-driven network call, not a background save, so it needs to
+// feel responsive without firing on every single character.
+const ITEM_SEARCH_DEBOUNCE_MS = 250
 
 /**
  * PRD 6.1 (J1): the app lands here, not on a dashboard. Inline numeric
@@ -32,6 +37,8 @@ export default function Composer() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'queued' | 'sent' | 'error'>('idle')
   const [sentInvoice, setSentInvoice] = useState<Invoice | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [activeLineId, setActiveLineId] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<ItemSuggestion[]>([])
 
   const total = useMemo(
     () => lines.reduce((sum, l) => sum + l.qty * l.rate, 0),
@@ -64,6 +71,38 @@ export default function Composer() {
     }, AUTOSAVE_DEBOUNCE_MS)
     return () => clearTimeout(timer)
   }, [draftId, customerName, customerWhatsapp, lines])
+
+  // Item catalogue fuzzy recall, scoped to whichever line is focused —
+  // querying by id (not just "the active description") so a selection made
+  // right after typing doesn't race a stale in-flight search.
+  const activeDescription = lines.find((l) => l.id === activeLineId)?.description ?? ''
+  useEffect(() => {
+    if (!activeLineId || !activeDescription.trim()) {
+      setSuggestions([])
+      return
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      api
+        .searchItems(activeDescription)
+        .then((res) => {
+          if (!cancelled) setSuggestions(res.items)
+        })
+        .catch(() => {
+          if (!cancelled) setSuggestions([])
+        })
+    }, ITEM_SEARCH_DEBOUNCE_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [activeLineId, activeDescription])
+
+  function selectSuggestion(lineId: string, item: ItemSuggestion) {
+    updateLine(lineId, { description: item.description, rate: Number(item.rate) })
+    setActiveLineId(null)
+    setSuggestions([])
+  }
 
   function updateLine(id: string, patch: Partial<Line>) {
     setLines((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)))
@@ -185,12 +224,32 @@ export default function Composer() {
       <div className="flex flex-col gap-2">
         {lines.map((line) => (
           <div key={line.id} className="grid grid-cols-[1fr_4rem_5rem] gap-2">
-            <input
-              className="rounded border px-2 py-1"
-              placeholder="Description"
-              value={line.description}
-              onChange={(e) => updateLine(line.id, { description: e.target.value })}
-            />
+            <div className="relative">
+              <input
+                className="w-full rounded border px-2 py-1"
+                placeholder="Description"
+                value={line.description}
+                onChange={(e) => updateLine(line.id, { description: e.target.value })}
+                onFocus={() => setActiveLineId(line.id)}
+                onBlur={() => setTimeout(() => setActiveLineId((cur) => (cur === line.id ? null : cur)), 150)}
+              />
+              {activeLineId === line.id && suggestions.length > 0 && (
+                <ul className="absolute left-0 right-0 top-full z-10 mt-1 max-h-48 overflow-auto rounded border bg-white text-neutral-900 shadow-lg">
+                  {suggestions.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between gap-2 px-2 py-1 text-left text-sm text-neutral-900 hover:bg-emerald-50"
+                        onClick={() => selectSuggestion(line.id, item)}
+                      >
+                        <span className="truncate">{item.description}</span>
+                        <span className="shrink-0 text-neutral-500">{item.rate}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
             <input
               className="rounded border px-2 py-1"
               type="number"

@@ -89,6 +89,7 @@ model Tenant {
   documents     Document[]
   numberSeries  NumberSeries[]
   taxProfiles   TaxProfile[]
+  items         Item[]
   waba          WabaConnection?
   paymentLinks  PaymentProviderLink[]
 }
@@ -153,6 +154,30 @@ model TaxProfile {
   createdAt DateTime @default(now())
 
   @@index([tenantId])
+}
+
+// PRD §8.3 P1 "item catalogue auto-save with fuzzy recall": every line a
+// merchant approves is upserted here (services/invoices.ts, same
+// transaction as the invoice itself — the same inline-dedup pattern as
+// Customer), so the composer can suggest past items as they type instead
+// of retyping the same line every invoice. normalizedDescription is the
+// dedup/lookup key (lowercased/trimmed); description keeps the original
+// casing for display. Fuzzy matching itself is pg_trgm (see the migration
+// — not expressible in the Prisma schema DSL, same reason RLS lives there).
+model Item {
+  id                     String   @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant   @relation(fields: [tenantId], references: [id])
+  description            String
+  normalizedDescription  String
+  unit                   String?
+  rate                   Decimal  @db.Decimal(14, 2)
+  useCount               Int      @default(1)
+  lastUsedAt             DateTime @default(now())
+  createdAt              DateTime @default(now())
+
+  @@unique([tenantId, normalizedDescription])
+  @@index([tenantId, lastUsedAt])
 }
 
 // A draft is client-owned (ULID, offline-capable). It becomes a Document

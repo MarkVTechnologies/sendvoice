@@ -49,6 +49,14 @@ export type ApproveInvoicePayload = {
   notes?: string
 }
 
+export type ItemSuggestion = {
+  id: string
+  description: string
+  unit: string | null
+  rate: string
+  useCount: number
+}
+
 export type Invoice = {
   id: string
   number: string
@@ -79,6 +87,11 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   listInvoices: () => request<Invoice[]>('/invoices'),
+  // PRD §8.3 P1: item catalogue auto-save with fuzzy recall. Empty/blank
+  // queries aren't worth a round trip — callers should skip calling this
+  // rather than lean on the server's own short-circuit for them.
+  searchItems: (q: string) =>
+    request<{ items: ItemSuggestion[] }>(`/items?q=${encodeURIComponent(q)}`),
   // The PDF route requires the same Bearer auth as everything else, so a
   // plain <a href> won't carry it — fetch it as a blob and hand back an
   // object URL the caller can open/revoke.

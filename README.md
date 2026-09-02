@@ -59,6 +59,8 @@ Onboarding collects country (real auto-detect via `Intl.Locale`), currency, a ta
 
 The composer autosaves to IndexedDB (PRD §8.4) — a lost connection or closed tab mid-edit doesn't lose the draft. Approval is idempotent by `draftId`: a retried request (flaky connection, the outbox flush) returns the original invoice instead of creating a duplicate.
 
+Every approved line item is upserted into a real, per-tenant item catalogue (PRD §8.3) — the next time a merchant starts typing a description they've used before, the composer suggests it back (fuzzy, via Postgres `pg_trgm`, so a typo still matches) and picking one fills in the description and rate.
+
 ## Status
 
 Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, logo, country/currency, tax setting) → invoice composer, autosaved → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF, idempotent by draftId) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page, logo included → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.
