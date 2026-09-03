@@ -28,6 +28,9 @@ const verifyOtpSchema = z.object({
       mimeType: z.enum(['image/png', 'image/jpeg', 'image/webp']),
     })
     .optional(),
+  // PRD §8.5 P0: a signup-time choice of PDF template. Defaults to
+  // "classic" (services/auth.ts) when omitted.
+  pdfTemplate: z.enum(['classic', 'modern']).optional(),
 })
 
 /**
@@ -62,7 +65,7 @@ export default async function authRoutes(app: FastifyInstance) {
   })
 
   app.post('/auth/otp/verify', async (req, reply) => {
-    const { phone, code, businessName, country, currency, tax, logo } = verifyOtpSchema.parse(req.body)
+    const { phone, code, businessName, country, currency, tax, logo, pdfTemplate } = verifyOtpSchema.parse(req.body)
 
     const ok = await verifyOtp(phone, code)
     if (!ok) {
@@ -74,6 +77,7 @@ export default async function authRoutes(app: FastifyInstance) {
       country,
       currency,
       taxRules: tax,
+      pdfTemplate,
       logo: logo ? { data: Buffer.from(logo.dataBase64, 'base64'), mimeType: logo.mimeType } : undefined,
     })
     const token = await reply.jwtSign(identity)

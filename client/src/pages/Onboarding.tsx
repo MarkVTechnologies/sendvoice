@@ -38,6 +38,7 @@ export default function Onboarding() {
   const [taxRate, setTaxRate] = useState<number | ''>(
     COUNTRY_DEFAULTS[detectCountry()].suggestedRatePercent ?? '',
   )
+  const [pdfTemplate, setPdfTemplate] = useState<'classic' | 'modern'>('classic')
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [logoPreview, setLogoPreview] = useState<string | null>(null)
   const [logoError, setLogoError] = useState<string | null>(null)
@@ -107,6 +108,7 @@ export default function Onboarding() {
         currency,
         tax,
         logo,
+        pdfTemplate,
       })
       setSession(token, phone)
       navigate('/')
@@ -243,6 +245,24 @@ export default function Onboarding() {
                 %
               </label>
             )}
+          </div>
+
+          <div className="flex flex-col gap-2 text-sm">
+            PDF style
+            <div className="grid grid-cols-2 gap-2">
+              {(['classic', 'modern'] as const).map((style) => (
+                <button
+                  key={style}
+                  type="button"
+                  className={`rounded border px-3 py-2 text-left capitalize ${
+                    pdfTemplate === style ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : ''
+                  }`}
+                  onClick={() => setPdfTemplate(style)}
+                >
+                  {style}
+                </button>
+              ))}
+            </div>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

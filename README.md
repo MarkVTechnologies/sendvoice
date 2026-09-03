@@ -65,6 +65,8 @@ Hosted invoice links are revocable (PRD §12) — the dashboard's "Revoke link" 
 
 The composer collects an optional due date, and the dashboard's Overdue total and per-invoice badges are real, computed from it — not permanently placeholder like they were before.
 
+Onboarding also collects a PDF style — Classic or Modern, two genuinely distinct typeset designs — captured once at signup (`Tenant.pdfTemplate`) rather than re-asked per invoice.
+
 ## Status
 
 Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, logo, country/currency, tax setting) → invoice composer, autosaved → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF, idempotent by draftId) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page, logo included → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.

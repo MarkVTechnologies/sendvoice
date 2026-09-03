@@ -82,6 +82,11 @@ model Tenant {
   // separate public serving route at all.
   logoData     Bytes?
   logoMimeType String?
+  // PRD §8.5 P0: which of the (eventually 3-4) PDF templates this tenant's
+  // invoices render with — a signup-time choice, not a per-invoice one.
+  // Unrecognized values fall back to "classic" at render time rather than
+  // failing an approval (see services/pdf/template.ts).
+  pdfTemplate String @default("classic")
   createdAt   DateTime @default(now())
 
   users         User[]
