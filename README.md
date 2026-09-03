@@ -51,7 +51,7 @@ npm install
 npm run dev              # http://localhost:5173, proxies /api to :4177
 ```
 
-Sign-up/login is real (OTP → JWT, stored in localStorage): with no BSP wired up yet (Phase 2), `/auth/otp/request` returns the code directly in the response outside production (`devCode`) and the onboarding screen surfaces it — that's dev-only and must not ship.
+Sign-up/login is real (OTP → JWT, stored in localStorage). The BSP is decided — Telnyx, for cost (see `DEVELOPMENT_PLAN.md` Open Decision #1) — and `services/telnyx.ts` has the real send integration (WhatsApp utility template, SMS fallback), but it needs a real Telnyx account and an approved Meta WhatsApp template (`TELNYX_API_KEY`/`TELNYX_WHATSAPP_FROM`/`TELNYX_OTP_TEMPLATE_NAME` in `.env`) before it does anything. Until those are set, `/auth/otp/request` returns the code directly in the response outside production (`devCode`) and the onboarding screen surfaces it — that's dev-only and must not ship.
 
 Approving an invoice opens WhatsApp automatically with the invoice pre-filled (Rail A) — the link inside points at a public hosted page (`GET /i/:token`, no login) served directly by the server, not the client SPA.
 

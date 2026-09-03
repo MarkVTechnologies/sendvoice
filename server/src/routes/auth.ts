@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { issueOtp, verifyOtp } from '../services/otp.js'
 import { resolveOrCreateIdentity } from '../services/auth.js'
+import { isTelnyxConfigured, sendOtp } from '../services/telnyx.js'
 
 const requestOtpSchema = z.object({ phone: z.string().min(6) })
 const verifyOtpSchema = z.object({
@@ -38,13 +39,24 @@ export default async function authRoutes(app: FastifyInstance) {
     const { phone } = requestOtpSchema.parse(req.body)
     const code = await issueOtp(phone)
 
-    // TODO(Phase 2): send via WhatsApp utility template (fallback SMS) via
-    // Telnyx (Open Decision #1 — decided, but blocked on the user creating
-    // a real Telnyx account + Meta WABA), never a marketing-category send.
-    // Until that's wired up, the code goes to the server log — this
-    // endpoint is not yet safe to expose in production.
-    req.log.info({ phone, code }, 'otp issued (dev: Telnyx not wired up yet, logging instead of sending)')
+    if (isTelnyxConfigured()) {
+      try {
+        await sendOtp(phone, code)
+      } catch (err) {
+        req.log.error({ err, phone }, 'Telnyx OTP send failed')
+        return reply.code(502).send({ error: 'otp_send_failed' })
+      }
+      // A real send happened — devCode must never appear in the response
+      // once there's somewhere real for the code to have gone, regardless
+      // of NODE_ENV.
+      return reply.send({ ok: true })
+    }
 
+    // No BSP configured (dev, or prod misconfiguration) — nowhere real to
+    // deliver this, so log it and hand the code back directly for local
+    // testing. Never in production: devCode in a response only makes sense
+    // when nothing real was sent.
+    req.log.info({ phone, code }, 'otp issued (dev: Telnyx not configured, logging instead of sending)')
     const devOnly = process.env.NODE_ENV !== 'production' ? { devCode: code } : {}
     return reply.send({ ok: true, ...devOnly })
   })
