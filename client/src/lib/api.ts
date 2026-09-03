@@ -99,6 +99,11 @@ export const api = {
   // rather than lean on the server's own short-circuit for them.
   searchItems: (q: string) =>
     request<{ items: ItemSuggestion[] }>(`/items?q=${encodeURIComponent(q)}`),
+  listItems: () => request<{ items: ItemSuggestion[] }>('/items'),
+  // Same empty-body gotcha as revokeHostedLink above: Fastify rejects an
+  // empty body under Content-Type: application/json, so every bodyless
+  // call through this shared request() helper needs an explicit '{}'.
+  deleteItem: (id: string) => request<{ ok: true }>(`/items/${id}`, { method: 'DELETE', body: '{}' }),
   // The PDF route requires the same Bearer auth as everything else, so a
   // plain <a href> won't carry it — fetch it as a blob and hand back an
   // object URL the caller can open/revoke.

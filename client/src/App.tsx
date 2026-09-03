@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Navigate, NavLink, Route, Routes } from 'react-router-dom'
 import Composer from './pages/Composer'
 import Dashboard from './pages/Dashboard'
+import Items from './pages/Items'
 import Onboarding from './pages/Onboarding'
 import { api, type ApproveInvoicePayload } from './lib/api'
 import { useAuth } from './lib/auth'
@@ -48,12 +49,21 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/items"
+            element={
+              <RequireAuth>
+                <Items />
+              </RequireAuth>
+            }
+          />
         </Routes>
       </main>
       {token && (
         <nav className="flex justify-around border-t bg-white p-2 text-sm">
           <NavLink to="/">New invoice</NavLink>
           <NavLink to="/dashboard">Dashboard</NavLink>
+          <NavLink to="/items">Items</NavLink>
         </nav>
       )}
     </div>

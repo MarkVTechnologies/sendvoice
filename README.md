@@ -59,7 +59,7 @@ Onboarding collects country (real auto-detect via `Intl.Locale`), currency, a ta
 
 The composer autosaves to IndexedDB (PRD §8.4) — a lost connection or closed tab mid-edit doesn't lose the draft. Approval is idempotent by `draftId`: a retried request (flaky connection, the outbox flush) returns the original invoice instead of creating a duplicate.
 
-Every approved line item is upserted into a real, per-tenant item catalogue (PRD §8.3) — the next time a merchant starts typing a description they've used before, the composer suggests it back (fuzzy, via Postgres `pg_trgm`, so a typo still matches) and picking one fills in the description and rate.
+Every approved line item is upserted into a real, per-tenant item catalogue (PRD §8.3) — the next time a merchant starts typing a description they've used before, the composer suggests it back (fuzzy, via Postgres `pg_trgm`, so a typo still matches) and picking one fills in the description and rate. A dedicated `/items` view lets a merchant see and prune what's accumulated.
 
 Hosted invoice links are revocable (PRD §12) — the dashboard's "Revoke link" control mints a fresh token and kills the old one immediately, so an already-shared link stops working the moment a merchant asks it to.
 

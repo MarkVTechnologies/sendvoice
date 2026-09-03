@@ -55,6 +55,29 @@ export type ItemSuggestion = {
 }
 
 /**
+ * Browse mode for the item catalogue's manage view — no query text, just
+ * "what's in here", most-recently-used first. Without this a merchant has
+ * no way to see or prune what's accumulated (a typo they approved once, a
+ * price that's since changed) short of typing into the composer and hoping
+ * it surfaces.
+ */
+export async function listItems(tx: PrismaClient, tenantId: string, limit = 100): Promise<ItemSuggestion[]> {
+  const items = await tx.item.findMany({
+    where: { tenantId },
+    orderBy: { lastUsedAt: 'desc' },
+    take: limit,
+    select: { id: true, description: true, unit: true, rate: true, useCount: true },
+  })
+  return items.map((i) => ({ ...i, rate: i.rate.toString() }))
+}
+
+/** Explicit tenantId filter, same defense-in-depth reasoning as searchItems. */
+export async function deleteItem(tx: PrismaClient, tenantId: string, id: string): Promise<boolean> {
+  const { count } = await tx.item.deleteMany({ where: { id, tenantId } })
+  return count > 0
+}
+
+/**
  * Fuzzy recall via pg_trgm, not just `ILIKE '%q%'` — a merchant typo
  * ("tailorng") or a partial word should still surface "Tailoring services".
  * Falls back to plain substring matching in the same query (the `OR ILIKE`
