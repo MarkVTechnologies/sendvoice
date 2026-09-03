@@ -61,6 +61,8 @@ The composer autosaves to IndexedDB (PRD §8.4) — a lost connection or closed 
 
 Every approved line item is upserted into a real, per-tenant item catalogue (PRD §8.3) — the next time a merchant starts typing a description they've used before, the composer suggests it back (fuzzy, via Postgres `pg_trgm`, so a typo still matches) and picking one fills in the description and rate.
 
+Hosted invoice links are revocable (PRD §12) — the dashboard's "Revoke link" control mints a fresh token and kills the old one immediately, so an already-shared link stops working the moment a merchant asks it to.
+
 ## Status
 
 Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, logo, country/currency, tax setting) → invoice composer, autosaved → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF, idempotent by draftId) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page, logo included → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.

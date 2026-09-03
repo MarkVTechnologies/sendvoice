@@ -7,9 +7,17 @@ import { api, type Invoice } from '../lib/api'
  * of which exist yet (composer doesn't collect a due date; there's no
  * payment endpoint) — shown as "—" rather than a misleading 0.
  */
+// A merchant re-clicking within this window confirms the revoke; clicking
+// anything else first (or just waiting) disarms it again. Avoids a native
+// confirm() dialog — blunt, unstyled, and untestable via browser automation
+// — for a two-tap in-place confirm instead.
+const REVOKE_CONFIRM_WINDOW_MS = 4000
+
 export default function Dashboard() {
   const [invoices, setInvoices] = useState<Invoice[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingRevokeId, setConfirmingRevokeId] = useState<string | null>(null)
+  const [revokeError, setRevokeError] = useState<string | null>(null)
 
   useEffect(() => {
     api
@@ -17,6 +25,27 @@ export default function Dashboard() {
       .then(setInvoices)
       .catch(() => setError("Couldn't load invoices."))
   }, [])
+
+  useEffect(() => {
+    if (!confirmingRevokeId) return
+    const timer = setTimeout(() => setConfirmingRevokeId(null), REVOKE_CONFIRM_WINDOW_MS)
+    return () => clearTimeout(timer)
+  }, [confirmingRevokeId])
+
+  async function revokeLink(invoiceId: string) {
+    if (confirmingRevokeId !== invoiceId) {
+      setConfirmingRevokeId(invoiceId)
+      return
+    }
+    setConfirmingRevokeId(null)
+    setRevokeError(null)
+    try {
+      const { hostedUrl } = await api.revokeHostedLink(invoiceId)
+      setInvoices((prev) => prev?.map((inv) => (inv.id === invoiceId ? { ...inv, hostedUrl } : inv)) ?? prev)
+    } catch {
+      setRevokeError("Couldn't revoke that link. Try again.")
+    }
+  }
 
   const outstanding = invoices
     ?.filter((inv) => inv.status !== 'PAID')
@@ -42,29 +71,39 @@ export default function Dashboard() {
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {revokeError && <p className="text-sm text-red-600">{revokeError}</p>}
 
       {invoices && invoices.length > 0 && (
         <div className="flex flex-col gap-2">
           <h2 className="text-sm font-medium text-neutral-500">Recent</h2>
           {invoices.map((inv) => (
-            <button
-              key={inv.id}
-              className="flex items-center justify-between rounded border p-3 text-left text-sm disabled:opacity-50"
-              disabled={!inv.pdfUrl}
-              onClick={async () => {
-                if (!inv.pdfUrl) return
-                const url = await api.fetchInvoicePdfUrl(inv.id)
-                window.open(url, '_blank')
-              }}
-            >
-              <div>
+            <div key={inv.id} className="flex items-center justify-between gap-2 rounded border p-3 text-sm">
+              <button
+                className="flex-1 text-left disabled:opacity-50"
+                disabled={!inv.pdfUrl}
+                onClick={async () => {
+                  if (!inv.pdfUrl) return
+                  const url = await api.fetchInvoicePdfUrl(inv.id)
+                  window.open(url, '_blank')
+                }}
+              >
                 <p className="font-medium">{inv.number}</p>
                 <p className="text-neutral-500">{inv.customer.name}</p>
+              </button>
+              <div className="flex flex-col items-end gap-1">
+                <p className="font-medium">
+                  {inv.currency} {inv.total}
+                </p>
+                {inv.hostedUrl && (
+                  <button
+                    className="text-xs text-amber-700 underline"
+                    onClick={() => revokeLink(inv.id)}
+                  >
+                    {confirmingRevokeId === inv.id ? 'Confirm revoke?' : 'Revoke link'}
+                  </button>
+                )}
               </div>
-              <p className="font-medium">
-                {inv.currency} {inv.total}
-              </p>
-            </button>
+            </div>
           ))}
         </div>
       )}

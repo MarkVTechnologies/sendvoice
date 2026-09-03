@@ -1,15 +1,8 @@
-import { randomBytes } from 'node:crypto'
 import type { PrismaClient } from '@prisma/client'
 import { allocateNumber } from './numbering.js'
 import { recordItemUsage } from './items.js'
 import { computeTax, type TaxRules } from './tax.js'
-
-// PRD §12 P0: high-entropy, unguessable — 24 bytes is 192 bits, plenty.
-// 90-day default expiry; "configurable window" is remaining work.
-const HOSTED_TOKEN_TTL_DAYS = 90
-function generateHostedToken(): string {
-  return randomBytes(24).toString('base64url')
-}
+import { generateHostedToken, hostedTokenExpiry } from './hostedToken.js'
 
 export type ApproveInvoiceInput = {
   customer: { name: string; whatsapp?: string; email?: string }
@@ -127,7 +120,7 @@ export async function approveInvoice(
       total,
       approvedAt: new Date(),
       hostedToken: generateHostedToken(),
-      hostedTokenExpiresAt: new Date(Date.now() + HOSTED_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000),
+      hostedTokenExpiresAt: hostedTokenExpiry(),
       lines: { create: lineData },
     },
     omit: { pdfData: true },

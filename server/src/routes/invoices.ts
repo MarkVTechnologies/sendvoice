@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { withTenant } from '../lib/prisma.js'
 import { approveInvoice } from '../services/invoices.js'
 import { renderAndStorePdf } from '../services/pdf.js'
+import { generateHostedToken, hostedTokenExpiry } from '../services/hostedToken.js'
 
 // Needs to be a real absolute URL — it goes into a wa.me pre-filled message
 // (Rail A), not just a client-side fetch. Defaults to localhost for dev;
@@ -94,6 +95,37 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       pdfUrl: `/api/invoices/${document.id}/pdf`,
       hostedUrl: hostedUrl(hostedToken),
     })
+  })
+
+  // PRD §12 P0: hosted invoice links are bearer tokens for financial data —
+  // must be revocable, not just expiring. "Revoke" here means mint a fresh
+  // token and discard the old one, rather than just nulling it out: the old
+  // link (already sent, possibly to the wrong person) dies immediately
+  // since resolve_document_by_token can no longer find it, but the merchant
+  // isn't left with a dead invoice — a new, live link is ready to re-share.
+  // A DocumentEvent records it, closing the "documented reason/log is
+  // remaining work" gap noted on Document.hostedToken in schema.prisma.
+  app.post('/invoices/:id/revoke-link', { preHandler: app.authenticate }, async (req, reply) => {
+    const { tenantId, userId } = req.user as { tenantId: string; userId: string }
+    const { id } = req.params as { id: string }
+
+    const result = await withTenant(tenantId, async (tx) => {
+      const existing = await tx.document.findUnique({ where: { id }, select: { id: true } })
+      if (!existing) return null
+
+      const document = await tx.document.update({
+        where: { id },
+        data: { hostedToken: generateHostedToken(), hostedTokenExpiresAt: hostedTokenExpiry() },
+        select: { hostedToken: true },
+      })
+      await tx.documentEvent.create({
+        data: { documentId: id, type: 'hosted_link_revoked', actorId: userId, data: { reason: 'merchant_requested' } },
+      })
+      return document
+    })
+
+    if (!result) return reply.code(404).send({ error: 'invoice_not_found' })
+    return reply.send({ hostedUrl: hostedUrl(result.hostedToken) })
   })
 
   app.get('/invoices/:id/pdf', { preHandler: app.authenticate }, async (req, reply) => {

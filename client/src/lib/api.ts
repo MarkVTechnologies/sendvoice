@@ -87,6 +87,13 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   listInvoices: () => request<Invoice[]>('/invoices'),
+  // PRD §12 P0: hosted links must be revocable. Mints a fresh token and
+  // discards the old one — the response's hostedUrl is the new live link.
+  revokeHostedLink: (invoiceId: string) =>
+    request<{ hostedUrl: string | null }>(`/invoices/${invoiceId}/revoke-link`, {
+      method: 'POST',
+      body: '{}',
+    }),
   // PRD §8.3 P1: item catalogue auto-save with fuzzy recall. Empty/blank
   // queries aren't worth a round trip — callers should skip calling this
   // rather than lean on the server's own short-circuit for them.
