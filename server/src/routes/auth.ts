@@ -31,6 +31,11 @@ const verifyOtpSchema = z.object({
   // PRD §8.5 P0: a signup-time choice of PDF template. Defaults to
   // "classic" (services/auth.ts) when omitted.
   pdfTemplate: z.enum(['classic', 'modern']).optional(),
+  // PRD §4.3: raw signup-attribution source — whatever `?ref=` value the
+  // client captured from the onboarding URL (see Onboarding.tsx). Capped
+  // well above any real hosted token's length; this is attribution data,
+  // not something that should ever be able to bloat a request.
+  referralSource: z.string().max(500).optional(),
 })
 
 /**
@@ -65,7 +70,8 @@ export default async function authRoutes(app: FastifyInstance) {
   })
 
   app.post('/auth/otp/verify', async (req, reply) => {
-    const { phone, code, businessName, country, currency, tax, logo, pdfTemplate } = verifyOtpSchema.parse(req.body)
+    const { phone, code, businessName, country, currency, tax, logo, pdfTemplate, referralSource } =
+      verifyOtpSchema.parse(req.body)
 
     const ok = await verifyOtp(phone, code)
     if (!ok) {
@@ -78,6 +84,7 @@ export default async function authRoutes(app: FastifyInstance) {
       currency,
       taxRules: tax,
       pdfTemplate,
+      referralSource,
       logo: logo ? { data: Buffer.from(logo.dataBase64, 'base64'), mimeType: logo.mimeType } : undefined,
     })
     const token = await reply.jwtSign(identity)

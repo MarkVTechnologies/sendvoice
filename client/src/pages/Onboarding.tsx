@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type TaxChoice } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { COUNTRY_DEFAULTS, detectCountry } from '../lib/countries'
@@ -27,6 +27,11 @@ function readFileAsBase64(file: File): Promise<string> {
 export default function Onboarding() {
   const navigate = useNavigate()
   const setSession = useAuth((s) => s.setSession)
+  // PRD §4.3 viral coefficient: whatever a hosted invoice's footer CTA
+  // attached as ?ref= (server ignores this on login, only uses it for a
+  // brand-new signup — see services/auth.ts).
+  const [searchParams] = useSearchParams()
+  const referralSource = searchParams.get('ref') ?? undefined
 
   const [step, setStep] = useState<'phone' | 'code'>('phone')
   const [phone, setPhone] = useState('')
@@ -109,6 +114,7 @@ export default function Onboarding() {
         tax,
         logo,
         pdfTemplate,
+        referralSource,
       })
       setSession(token, phone)
       navigate('/')

@@ -11,6 +11,7 @@ export type OnboardingInput = {
   taxRules?: TaxRules
   logo?: { data: Buffer; mimeType: string }
   pdfTemplate?: string
+  referralSource?: string
 }
 
 /**
@@ -53,6 +54,7 @@ export async function resolveOrCreateIdentity(phone: string, input: OnboardingIn
         logoData: input.logo ? new Uint8Array(input.logo.data) : undefined,
         logoMimeType: input.logo?.mimeType,
         pdfTemplate: input.pdfTemplate === 'modern' ? 'modern' : 'classic',
+        referralSource: input.referralSource?.trim() || undefined,
       },
     })
     await tx.user.create({

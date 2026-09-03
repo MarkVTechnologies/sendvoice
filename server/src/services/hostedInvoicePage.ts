@@ -1,6 +1,12 @@
 import type { Customer, Document, DocumentLine, Tenant } from '@prisma/client'
 import { tenantLogoDataUri } from './logo.js'
 
+// PRD §4.3: "viral coefficient (recipient→signup attribution)" — needs the
+// hosted page's footer CTA wired to signup source "from day one", not
+// retrofitted. Separate from PUBLIC_BASE_URL (routes/invoices.ts) because
+// the client SPA is a different origin/port from the API in dev.
+const CLIENT_URL = process.env.CLIENT_URL ?? 'http://localhost:5173'
+
 type InvoiceData = Document & {
   lines: DocumentLine[]
   customer: Customer
@@ -125,7 +131,9 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
     text-decoration: none;
     font-weight: 600;
   }
-  .footer { text-align: center; margin-top: 24px; font-size: 11.5px; color: #999; }
+  .footer { text-align: center; margin-top: 24px; font-size: 11.5px; }
+  .footer-cta { color: #999; text-decoration: none; }
+  .footer-cta:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -163,7 +171,9 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
 
       <a class="pdf-link" href="/i/${doc.hostedToken}/pdf">Download PDF</a>
     </div>
-    <div class="footer">Invoiced with Sendvoice</div>
+    <div class="footer">
+      <a class="footer-cta" href="${CLIENT_URL}/onboarding?ref=${encodeURIComponent(doc.hostedToken ?? '')}">Invoiced with Sendvoice — send your own free</a>
+    </div>
   </div>
 </body>
 </html>`

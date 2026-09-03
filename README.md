@@ -69,6 +69,8 @@ Onboarding also collects a PDF style — Classic or Modern, two genuinely distin
 
 Opening the hosted invoice page is tracked for real: it logs an audit event and moves the invoice to a `Viewed` status (shown on the dashboard), so "has this actually been opened" is a real signal, not a guess.
 
+The hosted page's footer is a real signup CTA, not just plain text — it links back to onboarding with a signup-attribution param, captured on `Tenant.referralSource` so a future viral-coefficient number has real data behind it.
+
 ## Status
 
 Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, logo, country/currency, tax setting) → invoice composer, autosaved → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF, idempotent by draftId) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page, logo included → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.

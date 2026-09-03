@@ -87,7 +87,14 @@ model Tenant {
   // Unrecognized values fall back to "classic" at render time rather than
   // failing an approval (see services/pdf/template.ts).
   pdfTemplate String @default("classic")
-  createdAt   DateTime @default(now())
+  // PRD §4.3: "viral coefficient (recipient→signup attribution)". The raw
+  // `ref` query param a signup arrived with (a hosted invoice's token, at
+  // the only source wired up so far) — stored unresolved, not joined to the
+  // referring Tenant at write time, since a token can be revoked/replaced
+  // long before anyone analyzes this; resolving it is an analysis-time
+  // concern, not a signup-time one. Null means organic/direct signup.
+  referralSource String?
+  createdAt      DateTime @default(now())
 
   users         User[]
   customers     Customer[]

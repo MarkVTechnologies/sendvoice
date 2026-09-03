@@ -42,6 +42,7 @@ export type OnboardingDetails = {
   tax?: TaxChoice
   logo?: { dataBase64: string; mimeType: string }
   pdfTemplate?: 'classic' | 'modern'
+  referralSource?: string
 }
 
 export type ApproveInvoicePayload = {
