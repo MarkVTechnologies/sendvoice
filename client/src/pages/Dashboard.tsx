@@ -96,6 +96,9 @@ export default function Dashboard() {
               >
                 <p className="font-medium">
                   {inv.number}
+                  {inv.status === 'VIEWED' && (
+                    <span className="ml-2 text-xs font-normal text-sky-600">Viewed</span>
+                  )}
                   {isOverdue(inv) && <span className="ml-2 text-xs font-normal text-red-600">Overdue</span>}
                 </p>
                 <p className="text-neutral-500">{inv.customer.name}</p>

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify'
-import { resolveHostedDocument } from '../services/hosted.js'
+import { recordHostedView, resolveHostedDocument } from '../services/hosted.js'
 import { renderHostedInvoicePage } from '../services/hostedInvoicePage.js'
 
 /**
@@ -14,6 +14,14 @@ export default async function hostedRoutes(app: FastifyInstance) {
     if (!doc) {
       reply.code(404)
       return reply.type('text/plain').send('This invoice link is invalid or has expired.')
+    }
+    // Never let a tracking-write failure break rendering a real financial
+    // document for the customer — recording the view matters, but showing
+    // them the invoice matters more.
+    try {
+      await recordHostedView(doc.tenantId, doc.id)
+    } catch (err) {
+      req.log.error({ err, documentId: doc.id }, 'failed to record hosted invoice view')
     }
     reply.type('text/html')
     return reply.send(renderHostedInvoicePage(doc))

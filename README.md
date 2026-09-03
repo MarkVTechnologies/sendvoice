@@ -67,6 +67,8 @@ The composer collects an optional due date, and the dashboard's Overdue total an
 
 Onboarding also collects a PDF style — Classic or Modern, two genuinely distinct typeset designs — captured once at signup (`Tenant.pdfTemplate`) rather than re-asked per invoice.
 
+Opening the hosted invoice page is tracked for real: it logs an audit event and moves the invoice to a `Viewed` status (shown on the dashboard), so "has this actually been opened" is a real signal, not a guess.
+
 ## Status
 
 Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, logo, country/currency, tax setting) → invoice composer, autosaved → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF, idempotent by draftId) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page, logo included → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.
