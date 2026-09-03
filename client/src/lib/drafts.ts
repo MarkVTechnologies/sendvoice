@@ -12,6 +12,7 @@ export type DraftRecord = {
   version: number
   customer: { name: string; whatsapp?: string }
   lines: Array<{ id: string; description: string; qty?: number; unit?: string; rate: number }>
+  dueDate?: string // YYYY-MM-DD, straight from an <input type="date">
   updatedAt: string
 }
 

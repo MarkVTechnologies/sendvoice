@@ -3,10 +3,13 @@ import { api, type Invoice } from '../lib/api'
 
 /**
  * PRD 8.8 (P0): outstanding, overdue, paid this month, count sent.
- * Overdue and paid-this-month need due dates and payment recording, neither
- * of which exist yet (composer doesn't collect a due date; there's no
- * payment endpoint) — shown as "—" rather than a misleading 0.
+ * Paid-this-month still needs real payment recording (Phase 1) — shown as
+ * "—" rather than a misleading 0. Overdue now has what it needs: the
+ * composer collects a due date.
  */
+function isOverdue(inv: Invoice): boolean {
+  return inv.status !== 'PAID' && inv.dueDate !== null && new Date(inv.dueDate) < new Date()
+}
 // A merchant re-clicking within this window confirms the revoke; clicking
 // anything else first (or just waiting) disarms it again. Avoids a native
 // confirm() dialog — blunt, unstyled, and untestable via browser automation
@@ -51,9 +54,13 @@ export default function Dashboard() {
     ?.filter((inv) => inv.status !== 'PAID')
     .reduce((sum, inv) => sum + (Number(inv.total) - Number(inv.amountPaid)), 0)
 
+  const overdue = invoices
+    ?.filter(isOverdue)
+    .reduce((sum, inv) => sum + (Number(inv.total) - Number(inv.amountPaid)), 0)
+
   const stats = [
     { label: 'Outstanding', value: invoices ? outstanding!.toFixed(2) : '—' },
-    { label: 'Overdue', value: '—' },
+    { label: 'Overdue', value: invoices ? overdue!.toFixed(2) : '—' },
     { label: 'Paid this month', value: '—' },
     { label: 'Sent', value: invoices ? String(invoices.length) : '—' },
   ]
@@ -87,7 +94,10 @@ export default function Dashboard() {
                   window.open(url, '_blank')
                 }}
               >
-                <p className="font-medium">{inv.number}</p>
+                <p className="font-medium">
+                  {inv.number}
+                  {isOverdue(inv) && <span className="ml-2 text-xs font-normal text-red-600">Overdue</span>}
+                </p>
                 <p className="text-neutral-500">{inv.customer.name}</p>
               </button>
               <div className="flex flex-col items-end gap-1">

@@ -46,6 +46,7 @@ export type OnboardingDetails = {
 export type ApproveInvoicePayload = {
   customer: { name: string; whatsapp: string }
   lines: Array<{ description: string; qty?: number; unit?: string; rate: number }>
+  dueDate?: string // full ISO 8601 datetime — the server's zod schema requires it, not just a date
   notes?: string
 }
 
@@ -65,6 +66,7 @@ export type Invoice = {
   status: string
   currency: string
   createdAt: string
+  dueDate: string | null
   pdfUrl: string | null
   hostedUrl: string | null
   customer: { name: string; whatsapp: string | null }

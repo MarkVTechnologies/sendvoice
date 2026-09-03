@@ -34,6 +34,7 @@ export default function Composer() {
   const [lines, setLines] = useState<Line[]>([
     { id: crypto.randomUUID(), description: '', qty: 1, rate: 0 },
   ])
+  const [dueDate, setDueDate] = useState('') // YYYY-MM-DD from <input type="date">, optional
   const [status, setStatus] = useState<'idle' | 'sending' | 'queued' | 'sent' | 'error'>('idle')
   const [sentInvoice, setSentInvoice] = useState<Invoice | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -53,6 +54,7 @@ export default function Composer() {
       setCustomerName(draft.customer.name)
       setCustomerWhatsapp(draft.customer.whatsapp ?? '')
       setLines(draft.lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty ?? 1, rate: l.rate })))
+      setDueDate(draft.dueDate ?? '')
     })
   }, [])
 
@@ -67,10 +69,11 @@ export default function Composer() {
         version: 1,
         customer: { name: customerName, whatsapp: customerWhatsapp || undefined },
         lines: lines.map((l) => ({ id: l.id, description: l.description, qty: l.qty, unit: undefined, rate: l.rate })),
+        dueDate: dueDate || undefined,
       })
     }, AUTOSAVE_DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [draftId, customerName, customerWhatsapp, lines])
+  }, [draftId, customerName, customerWhatsapp, lines, dueDate])
 
   // Item catalogue fuzzy recall, scoped to whichever line is focused —
   // querying by id (not just "the active description") so a selection made
@@ -118,6 +121,7 @@ export default function Composer() {
     setCustomerName('')
     setCustomerWhatsapp('')
     setLines([{ id: crypto.randomUUID(), description: '', qty: 1, rate: 0 }])
+    setDueDate('')
     setStatus('idle')
     setSentInvoice(null)
   }
@@ -128,6 +132,9 @@ export default function Composer() {
       lines: lines
         .filter((l) => l.description)
         .map((l) => ({ description: l.description, qty: l.qty, rate: l.rate })),
+      // <input type="date"> gives "YYYY-MM-DD"; a date-only string parses as
+      // UTC midnight per spec, so this is consistent across browsers.
+      dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
     }
 
     if (!navigator.onLine) {
@@ -270,6 +277,18 @@ export default function Composer() {
           + Add line
         </button>
       </div>
+
+      <label className="flex flex-col gap-1 text-sm text-neutral-500">
+        <span>
+          Due date <span className="text-neutral-400">(optional)</span>
+        </span>
+        <input
+          className="rounded border px-3 py-2 text-neutral-900"
+          type="date"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
+        />
+      </label>
 
       <div className="flex items-center justify-between border-t pt-3 text-lg font-semibold">
         <span>Total</span>
