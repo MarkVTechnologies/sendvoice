@@ -43,6 +43,8 @@ export type OnboardingDetails = {
   logo?: { dataBase64: string; mimeType: string }
   pdfTemplate?: 'classic' | 'modern'
   referralSource?: string
+  address?: string
+  taxId?: string
 }
 
 export type ApproveInvoicePayload = {

@@ -74,6 +74,12 @@ model Tenant {
   country     String // ISO 3166-1 alpha-2 — keys tax profile + payment routing
   currency    String // ISO 4217
   taxId       String?
+  // PRD §6.1 onboarding field — every PDF template already had a slot for
+  // this ("No business address field on Tenant yet" was the exact gap),
+  // it just had nothing to render. Optional/skippable like every other
+  // onboarding field; free text rather than structured street/city/etc.
+  // since invoices need a single printable block, not a queryable address.
+  address     String?
   logoUrl     String? // unused for now — see logoData
   // PRD §6.1: onboarding's "logo (optional, skippable)". Stored inline
   // (like Document.pdfData) rather than served from a URL — both the PDF

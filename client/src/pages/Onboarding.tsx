@@ -37,6 +37,8 @@ export default function Onboarding() {
   const [phone, setPhone] = useState('')
   const [code, setCode] = useState('')
   const [businessName, setBusinessName] = useState('')
+  const [address, setAddress] = useState('')
+  const [taxId, setTaxId] = useState('')
   const [country, setCountry] = useState(detectCountry())
   const [currency, setCurrency] = useState(COUNTRY_DEFAULTS[detectCountry()].currency)
   const [noTax, setNoTax] = useState(true)
@@ -109,6 +111,8 @@ export default function Onboarding() {
         : undefined
       const { token } = await api.verifyOtp(phone, code, {
         businessName: businessName || undefined,
+        address: address || undefined,
+        taxId: !noTax && taxId ? taxId : undefined,
         country,
         currency,
         tax,
@@ -187,6 +191,16 @@ export default function Onboarding() {
               onChange={(e) => setBusinessName(e.target.value)}
             />
           </label>
+          <label className="flex flex-col gap-1 text-sm">
+            Business address <span className="text-neutral-400">(optional)</span>
+            <textarea
+              className="rounded border px-3 py-2"
+              rows={2}
+              placeholder={'12 Adeola Odeku St\nVictoria Island, Lagos'}
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </label>
 
           <div className="flex items-center gap-3">
             {logoPreview && (
@@ -249,6 +263,17 @@ export default function Onboarding() {
                   onChange={(e) => setTaxRate(e.target.value === '' ? '' : Number(e.target.value))}
                 />
                 %
+              </label>
+            )}
+            {!noTax && (
+              <label className="flex flex-col gap-1 text-sm">
+                Tax registration number <span className="text-neutral-400">(optional)</span>
+                <input
+                  className="rounded border px-2 py-1"
+                  placeholder="e.g. VAT/TIN number"
+                  value={taxId}
+                  onChange={(e) => setTaxId(e.target.value)}
+                />
               </label>
             )}
           </div>

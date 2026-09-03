@@ -71,6 +71,8 @@ Opening the hosted invoice page is tracked for real: it logs an audit event and 
 
 The hosted page's footer is a real signup CTA, not just plain text — it links back to onboarding with a signup-attribution param, captured on `Tenant.referralSource` so a future viral-coefficient number has real data behind it.
 
+Onboarding also collects a business address (multi-line, shown everywhere the business identity already appears) and, when charging tax, a tax registration number — both existed in the templates before this and had nowhere to come from.
+
 ## Status
 
 Phase 0, in progress. Working end-to-end today: signup (phone → OTP → business name, logo, country/currency, tax setting) → invoice composer, autosaved → approval (real allocated number, real tax-inclusive total, inline customer creation with WhatsApp dedup, a real rendered PDF, idempotent by draftId) → WhatsApp opens with the invoice pre-filled → the hosted link opens a real public page, logo included → dashboard (real outstanding total, real invoice list, opens the PDF). All of it tenant-isolated by Postgres RLS, verified against real cross-tenant reads. Run it and click through it — it works.

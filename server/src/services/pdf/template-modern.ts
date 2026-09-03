@@ -62,7 +62,7 @@ export function renderModernTemplate(doc: InvoiceData): string {
   }
   .business img { max-height: 36px; max-width: 120px; object-fit: contain; display: block; }
   .business h1 { font-size: 22px; margin: 0 0 4px; font-weight: 700; letter-spacing: -0.01em; }
-  .business .meta { color: #b8bfd6; font-size: 11.5px; }
+  .business .meta { color: #b8bfd6; font-size: 11.5px; white-space: pre-line; }
   .doc-type { text-align: right; }
   .doc-type .label {
     display: inline-block;
@@ -128,7 +128,10 @@ export function renderModernTemplate(doc: InvoiceData): string {
       ${logoDataUri ? `<div class="logo-chip"><img src="${logoDataUri}" alt="" /></div>` : ''}
       <div>
         <h1>${escapeHtml(doc.tenant.tradingName || doc.tenant.legalName)}</h1>
-        <div class="meta">${doc.tenant.taxId ? `Tax ID: ${escapeHtml(doc.tenant.taxId)}` : ''}</div>
+        <div class="meta">
+          ${doc.tenant.address ? `<div>${escapeHtml(doc.tenant.address)}</div>` : ''}
+          ${doc.tenant.taxId ? `<div>Tax ID: ${escapeHtml(doc.tenant.taxId)}</div>` : ''}
+        </div>
       </div>
     </div>
     <div class="doc-type">

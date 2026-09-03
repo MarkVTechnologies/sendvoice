@@ -52,7 +52,7 @@ export function renderClassicTemplate(doc: InvoiceData): string {
   .business { display: flex; align-items: center; gap: 14px; }
   .business img { max-height: 48px; max-width: 140px; object-fit: contain; }
   .business h1 { font-size: 20px; margin: 0 0 4px; }
-  .business .meta { color: #555; font-size: 12px; }
+  .business .meta { color: #555; font-size: 12px; white-space: pre-line; }
   .doc-type { text-align: right; }
   .doc-type .label { font-size: 22px; font-weight: 700; letter-spacing: 0.04em; color: #0b5d3b; }
   .doc-type .number { font-size: 14px; color: #555; margin-top: 4px; }
@@ -93,9 +93,8 @@ export function renderClassicTemplate(doc: InvoiceData): string {
       <div>
         <h1>${escapeHtml(doc.tenant.tradingName || doc.tenant.legalName)}</h1>
         <div class="meta">
-          ${/* No business address field on Tenant yet — full onboarding
-               (PRD §6.1) is remaining work; tax ID is what's collectible today. */ ''}
-          ${doc.tenant.taxId ? `Tax ID: ${escapeHtml(doc.tenant.taxId)}` : ''}
+          ${doc.tenant.address ? `<div>${escapeHtml(doc.tenant.address)}</div>` : ''}
+          ${doc.tenant.taxId ? `<div>Tax ID: ${escapeHtml(doc.tenant.taxId)}</div>` : ''}
         </div>
       </div>
     </div>

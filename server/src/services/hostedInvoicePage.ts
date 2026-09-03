@@ -84,6 +84,7 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
   .card { background: #fff; border-radius: 12px; padding: 24px; box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 8px 24px -12px rgba(0,0,0,0.15); }
   .business { display: flex; align-items: center; gap: 10px; font-size: 15px; color: #555; margin-bottom: 2px; }
   .business img { max-height: 32px; max-width: 100px; object-fit: contain; }
+  .business-meta { font-size: 11.5px; color: #999; margin-bottom: 10px; white-space: pre-line; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .status {
     display: inline-block;
@@ -140,6 +141,14 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
   <div class="wrap">
     <div class="card">
       <div class="business">${logoDataUri ? `<img src="${logoDataUri}" alt="" />` : ''}${businessName}</div>
+      ${
+        doc.tenant.address || doc.tenant.taxId
+          ? `<div class="business-meta">
+              ${doc.tenant.address ? `<div>${escapeHtml(doc.tenant.address)}</div>` : ''}
+              ${doc.tenant.taxId ? `<div>Tax ID: ${escapeHtml(doc.tenant.taxId)}</div>` : ''}
+            </div>`
+          : ''
+      }
       <h1>${doc.number ?? 'Invoice'}</h1>
       <span class="status">${escapeHtml(doc.status)}</span>
 

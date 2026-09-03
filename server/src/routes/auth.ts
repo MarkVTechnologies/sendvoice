@@ -36,6 +36,12 @@ const verifyOtpSchema = z.object({
   // well above any real hosted token's length; this is attribution data,
   // not something that should ever be able to bloat a request.
   referralSource: z.string().max(500).optional(),
+  // PRD §6.1 onboarding field — every PDF template already had a slot for
+  // this, it just had nothing to render. Free text, one printable block.
+  address: z.string().max(500).optional(),
+  // Same gap, same spot: Tenant.taxId existed and rendered in all three
+  // templates, but nothing ever collected it.
+  taxId: z.string().max(100).optional(),
 })
 
 /**
@@ -70,7 +76,7 @@ export default async function authRoutes(app: FastifyInstance) {
   })
 
   app.post('/auth/otp/verify', async (req, reply) => {
-    const { phone, code, businessName, country, currency, tax, logo, pdfTemplate, referralSource } =
+    const { phone, code, businessName, country, currency, tax, logo, pdfTemplate, referralSource, address, taxId } =
       verifyOtpSchema.parse(req.body)
 
     const ok = await verifyOtp(phone, code)
@@ -85,6 +91,8 @@ export default async function authRoutes(app: FastifyInstance) {
       taxRules: tax,
       pdfTemplate,
       referralSource,
+      address,
+      taxId,
       logo: logo ? { data: Buffer.from(logo.dataBase64, 'base64'), mimeType: logo.mimeType } : undefined,
     })
     const token = await reply.jwtSign(identity)

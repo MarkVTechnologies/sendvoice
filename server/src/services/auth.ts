@@ -12,6 +12,8 @@ export type OnboardingInput = {
   logo?: { data: Buffer; mimeType: string }
   pdfTemplate?: string
   referralSource?: string
+  address?: string
+  taxId?: string
 }
 
 /**
@@ -55,6 +57,8 @@ export async function resolveOrCreateIdentity(phone: string, input: OnboardingIn
         logoMimeType: input.logo?.mimeType,
         pdfTemplate: input.pdfTemplate === 'modern' ? 'modern' : 'classic',
         referralSource: input.referralSource?.trim() || undefined,
+        address: input.address?.trim() || undefined,
+        taxId: input.taxId?.trim() || undefined,
       },
     })
     await tx.user.create({
