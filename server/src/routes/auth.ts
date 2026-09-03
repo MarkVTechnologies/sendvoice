@@ -38,11 +38,12 @@ export default async function authRoutes(app: FastifyInstance) {
     const { phone } = requestOtpSchema.parse(req.body)
     const code = await issueOtp(phone)
 
-    // TODO(Phase 2): send via WhatsApp utility template (fallback SMS),
-    // never a marketing-category send. No BSP is wired up yet (Open
-    // Decision #1 in the plan blocks that), so for now the code goes to the
-    // server log — this endpoint is not yet safe to expose in production.
-    req.log.info({ phone, code }, 'otp issued (dev: BSP not wired up, logging instead of sending)')
+    // TODO(Phase 2): send via WhatsApp utility template (fallback SMS) via
+    // Telnyx (Open Decision #1 — decided, but blocked on the user creating
+    // a real Telnyx account + Meta WABA), never a marketing-category send.
+    // Until that's wired up, the code goes to the server log — this
+    // endpoint is not yet safe to expose in production.
+    req.log.info({ phone, code }, 'otp issued (dev: Telnyx not wired up yet, logging instead of sending)')
 
     const devOnly = process.env.NODE_ENV !== 'production' ? { devCode: code } : {}
     return reply.send({ ok: true, ...devOnly })
