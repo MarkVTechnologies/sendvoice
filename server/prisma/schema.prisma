@@ -329,6 +329,14 @@ model Payment {
   recordedAt DateTime @default(now())
 
   @@index([documentId])
+  // PRD §9.5: "every WhatsApp send is idempotent" — the same discipline
+  // applies to PSP confirmations. A Paystack webhook retry and the hosted
+  // page's own post-payment redirect (services/payments.ts) can both race
+  // to record the identical transaction; this constraint is what makes the
+  // second one a no-op instead of a double payment. Postgres treats NULL as
+  // distinct from NULL, so manual cash/bank_transfer payments (both fields
+  // null) never collide with each other or with this constraint.
+  @@unique([provider, reference])
 }
 
 // Per-tenant WABA — Embedded Signup grants revocable access; each merchant

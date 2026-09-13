@@ -109,6 +109,14 @@ export const api = {
   // invoice linked back to the quote — the quote itself is never edited.
   convertQuote: (quoteId: string) =>
     request<Invoice>(`/invoices/${quoteId}/convert`, { method: 'POST', body: '{}' }),
+  // PRD §8.7 P0: manual cash/bank-transfer recording, with partial support
+  // — the server accumulates this the same way it would multiple PSP
+  // payments, moving status to PARTIALLY_PAID or PAID as the total is met.
+  recordPayment: (invoiceId: string, payload: { amount: number; method: 'cash' | 'bank_transfer' }) =>
+    request<Invoice>(`/invoices/${invoiceId}/payments`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   // PRD §12 P0: hosted links must be revocable. Mints a fresh token and
   // discards the old one — the response's hostedUrl is the new live link.
   revokeHostedLink: (invoiceId: string) =>

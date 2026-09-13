@@ -1,5 +1,6 @@
 import type { Customer, Document, DocumentLine, Tenant } from '@prisma/client'
 import { tenantLogoDataUri } from './logo.js'
+import { isPaystackConfigured, paystackSupportsCurrency } from './paystack.js'
 
 // PRD §4.3: "viral coefficient (recipient→signup attribution)" — needs the
 // hosted page's footer CTA wired to signup source "from day one", not
@@ -54,6 +55,28 @@ function renderBankBlock(doc: InvoiceData): string {
 }
 
 /**
+ * PRD §8.7 P0: "Pay Now on the hosted invoice page." A plain HTML form
+ * (no client JS — matching the rest of this page) that POSTs to
+ * routes/hosted.ts's /pay handler, which redirects straight on to
+ * Paystack's own hosted payment page. Falls back to the original honest
+ * disabled state when Paystack isn't configured or doesn't support this
+ * invoice's currency — never a button that silently does nothing.
+ */
+function renderPayAction(doc: InvoiceData): string {
+  const balance = Number(doc.total) - Number(doc.amountPaid)
+  if (balance <= 0) {
+    return `<div class="response-banner accepted">Paid in full</div>`
+  }
+  if (!isPaystackConfigured() || !paystackSupportsCurrency(doc.currency)) {
+    return `<button class="pay disabled" disabled>Pay Now</button>
+            <p class="pay-note">Online payment isn't set up for this business yet.</p>`
+  }
+  return `<form method="post" action="/i/${doc.hostedToken}/pay">
+            <button type="submit" class="pay">Pay Now — ${money(balance, doc.currency)}</button>
+          </form>`
+}
+
+/**
  * PRD §8.6 P0: "mobile-optimised hosted invoice page (no login, tokenised
  * URL) showing line items, total, due date, and a prominent Pay Now button
  * routing to the merchant's connected payment provider."
@@ -62,9 +85,6 @@ function renderBankBlock(doc: InvoiceData): string {
  * the core view. This is why it's a separate, plain server-rendered page
  * rather than part of the client SPA — no framework, no client JS at all
  * for the view itself, inline CSS, no external requests.
- *
- * Pay Now has no payment provider to route to yet (Phase 1) — shown as an
- * honest disabled state, not a button that silently does nothing.
  */
 // PRD §7.3: doc types share one hosted-page engine; only the label and the
 // action area (Pay Now vs. Accept/Decline) differ.
@@ -256,8 +276,7 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
               : doc.status === 'DECLINED'
                 ? `<div class="response-banner declined">You declined this quote</div>`
                 : ''
-          : `<button class="pay disabled" disabled>Pay Now</button>
-             <p class="pay-note">Online payment isn't set up for this business yet.</p>`
+          : renderPayAction(doc)
       }
       ${renderBankBlock(doc)}
 

@@ -4,6 +4,7 @@ import { withTenant } from '../lib/prisma.js'
 import { approveInvoice, convertQuoteToInvoice } from '../services/invoices.js'
 import { renderAndStorePdf } from '../services/pdf.js'
 import { generateHostedToken, hostedTokenExpiry } from '../services/hostedToken.js'
+import { recordPayment } from '../services/payments.js'
 
 // Needs to be a real absolute URL — it goes into a wa.me pre-filled message
 // (Rail A), not just a client-side fetch. Defaults to localhost for dev;
@@ -35,6 +36,12 @@ const approveSchema = z.object({
   // quote goes through this same approval endpoint, distinguished only by
   // docType. Defaults to INVOICE so no existing caller needs to change.
   docType: z.enum(['INVOICE', 'QUOTE']).optional(),
+})
+
+const recordPaymentSchema = z.object({
+  amount: z.number().positive(),
+  method: z.enum(['cash', 'bank_transfer']),
+  reference: z.string().max(200).optional(),
 })
 
 /**
@@ -154,6 +161,38 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     return reply.send({
       ...rest,
       pdfUrl: `/api/invoices/${document.id}/pdf`,
+      hostedUrl: hostedUrl(hostedToken),
+    })
+  })
+
+  // PRD §8.7 P0: "Manual payment recording (cash, transfer) with partial
+  // support." Shares the same recordPayment core as the Paystack
+  // webhook/callback (services/payments.ts) — a merchant marking cash
+  // received moves Document.status the same way a PSP confirmation does,
+  // and multiple partial entries accumulate the same way multiple partial
+  // PSP payments would.
+  app.post('/invoices/:id/payments', { preHandler: app.authenticate }, async (req, reply) => {
+    const { tenantId } = req.user as { tenantId: string }
+    const { id } = req.params as { id: string }
+    const input = recordPaymentSchema.parse(req.body)
+
+    let result: Awaited<ReturnType<typeof recordPayment>>
+    try {
+      result = await withTenant(tenantId, (tx) =>
+        recordPayment(tx, id, { amount: input.amount, method: input.method, reference: input.reference }),
+      )
+    } catch {
+      return reply.code(404).send({ error: 'invoice_not_found' })
+    }
+
+    if (!result.created) {
+      return reply.code(400).send({ error: 'cannot_record_payment' })
+    }
+
+    const { hostedToken, ...rest } = result.document
+    return reply.send({
+      ...rest,
+      pdfUrl: `/api/invoices/${result.document.id}/pdf`,
       hostedUrl: hostedUrl(hostedToken),
     })
   })

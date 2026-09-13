@@ -31,6 +31,15 @@ export default function Dashboard() {
   const [confirmingConvertId, setConfirmingConvertId] = useState<string | null>(null)
   const [convertingId, setConvertingId] = useState<string | null>(null)
   const [convertError, setConvertError] = useState<string | null>(null)
+  // PRD §8.7 P0: manual cash/bank-transfer recording. `payingId` is which
+  // invoice's inline form is open — same "one open at a time" shape as the
+  // revoke/convert confirms above, just without their timed auto-dismiss
+  // since filling in an amount takes longer than a single tap.
+  const [payingId, setPayingId] = useState<string | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bank_transfer'>('cash')
+  const [recordingPayment, setRecordingPayment] = useState(false)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
 
   useEffect(() => {
     api
@@ -94,6 +103,32 @@ export default function Dashboard() {
     }
   }
 
+  function openPaymentForm(inv: Invoice) {
+    setPayingId(inv.id)
+    setPaymentAmount((Number(inv.total) - Number(inv.amountPaid)).toFixed(2))
+    setPaymentMethod('cash')
+    setPaymentError(null)
+  }
+
+  async function submitPayment(invoiceId: string) {
+    const amount = Number(paymentAmount)
+    if (!amount || amount <= 0) {
+      setPaymentError('Enter a valid amount.')
+      return
+    }
+    setPaymentError(null)
+    setRecordingPayment(true)
+    try {
+      const updated = await api.recordPayment(invoiceId, { amount, method: paymentMethod })
+      setInvoices((prev) => prev?.map((inv) => (inv.id === invoiceId ? updated : inv)) ?? prev)
+      setPayingId(null)
+    } catch {
+      setPaymentError("Couldn't record that payment. Try again.")
+    } finally {
+      setRecordingPayment(false)
+    }
+  }
+
   const financial = invoices?.filter((inv) => inv.docType === 'INVOICE')
 
   const outstanding = financial
@@ -140,62 +175,114 @@ export default function Dashboard() {
           {invoices.map((inv) => {
             const isQuote = inv.docType === 'QUOTE'
             const convertedInto = isQuote ? invoiceByQuoteId.get(inv.id) : undefined
+            // Only a real, unpaid INVOICE can take a manual payment — a
+            // quote isn't billed (PRD §7.3), and there's nothing left to
+            // collect once the balance is already zero.
+            const canRecordPayment =
+              inv.docType === 'INVOICE' && Number(inv.total) - Number(inv.amountPaid) > 0
             return (
-              <div key={inv.id} className="flex items-center justify-between gap-2 rounded border p-3 text-sm">
-                <button
-                  className="flex-1 text-left disabled:opacity-50"
-                  disabled={!inv.pdfUrl}
-                  onClick={async () => {
-                    if (!inv.pdfUrl) return
-                    const url = await api.fetchInvoicePdfUrl(inv.id)
-                    window.open(url, '_blank')
-                  }}
-                >
-                  <p className="font-medium">
-                    {inv.number}
-                    {isQuote && <span className="ml-2 text-xs font-normal text-violet-600">Quote</span>}
-                    {inv.status === 'VIEWED' && (
-                      <span className="ml-2 text-xs font-normal text-sky-600">Viewed</span>
-                    )}
-                    {inv.status === 'ACCEPTED' && (
-                      <span className="ml-2 text-xs font-normal text-emerald-600">Accepted</span>
-                    )}
-                    {inv.status === 'DECLINED' && (
-                      <span className="ml-2 text-xs font-normal text-red-600">Declined</span>
-                    )}
-                    {isOverdue(inv) && <span className="ml-2 text-xs font-normal text-red-600">Overdue</span>}
-                    {inv.convertedFromId && (
-                      <span className="ml-2 text-xs font-normal text-neutral-400">from quote</span>
-                    )}
-                  </p>
-                  <p className="text-neutral-500">{inv.customer.name}</p>
-                </button>
-                <div className="flex flex-col items-end gap-1">
-                  <p className="font-medium">
-                    {inv.currency} {inv.total}
-                  </p>
-                  {isQuote &&
-                    (convertedInto ? (
-                      <span className="text-xs text-neutral-400">→ {convertedInto.number}</span>
-                    ) : (
-                      <button
-                        className="text-xs text-emerald-700 underline disabled:opacity-50"
-                        disabled={convertingId === inv.id}
-                        onClick={() => convertQuote(inv.id)}
-                      >
-                        {convertingId === inv.id
-                          ? 'Converting…'
-                          : confirmingConvertId === inv.id
-                            ? 'Confirm convert?'
-                            : 'Convert to invoice'}
+              <div key={inv.id} className="flex flex-col gap-2 rounded border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    className="flex-1 text-left disabled:opacity-50"
+                    disabled={!inv.pdfUrl}
+                    onClick={async () => {
+                      if (!inv.pdfUrl) return
+                      const url = await api.fetchInvoicePdfUrl(inv.id)
+                      window.open(url, '_blank')
+                    }}
+                  >
+                    <p className="font-medium">
+                      {inv.number}
+                      {isQuote && <span className="ml-2 text-xs font-normal text-violet-600">Quote</span>}
+                      {inv.status === 'VIEWED' && (
+                        <span className="ml-2 text-xs font-normal text-sky-600">Viewed</span>
+                      )}
+                      {inv.status === 'ACCEPTED' && (
+                        <span className="ml-2 text-xs font-normal text-emerald-600">Accepted</span>
+                      )}
+                      {inv.status === 'DECLINED' && (
+                        <span className="ml-2 text-xs font-normal text-red-600">Declined</span>
+                      )}
+                      {inv.status === 'PAID' && (
+                        <span className="ml-2 text-xs font-normal text-emerald-600">Paid</span>
+                      )}
+                      {inv.status === 'PARTIALLY_PAID' && (
+                        <span className="ml-2 text-xs font-normal text-amber-600">Partially paid</span>
+                      )}
+                      {isOverdue(inv) && <span className="ml-2 text-xs font-normal text-red-600">Overdue</span>}
+                      {inv.convertedFromId && (
+                        <span className="ml-2 text-xs font-normal text-neutral-400">from quote</span>
+                      )}
+                    </p>
+                    <p className="text-neutral-500">{inv.customer.name}</p>
+                  </button>
+                  <div className="flex flex-col items-end gap-1">
+                    <p className="font-medium">
+                      {inv.currency} {inv.total}
+                    </p>
+                    {isQuote &&
+                      (convertedInto ? (
+                        <span className="text-xs text-neutral-400">→ {convertedInto.number}</span>
+                      ) : (
+                        <button
+                          className="text-xs text-emerald-700 underline disabled:opacity-50"
+                          disabled={convertingId === inv.id}
+                          onClick={() => convertQuote(inv.id)}
+                        >
+                          {convertingId === inv.id
+                            ? 'Converting…'
+                            : confirmingConvertId === inv.id
+                              ? 'Confirm convert?'
+                              : 'Convert to invoice'}
+                        </button>
+                      ))}
+                    {inv.hostedUrl && (
+                      <button className="text-xs text-amber-700 underline" onClick={() => revokeLink(inv.id)}>
+                        {confirmingRevokeId === inv.id ? 'Confirm revoke?' : 'Revoke link'}
                       </button>
-                    ))}
-                  {inv.hostedUrl && (
-                    <button className="text-xs text-amber-700 underline" onClick={() => revokeLink(inv.id)}>
-                      {confirmingRevokeId === inv.id ? 'Confirm revoke?' : 'Revoke link'}
-                    </button>
-                  )}
+                    )}
+                    {canRecordPayment && payingId !== inv.id && (
+                      <button className="text-xs text-emerald-700 underline" onClick={() => openPaymentForm(inv)}>
+                        Record payment
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {payingId === inv.id && (
+                  <div className="flex flex-col gap-2 border-t pt-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="w-24 rounded border px-2 py-1"
+                        value={paymentAmount}
+                        onChange={(e) => setPaymentAmount(e.target.value)}
+                      />
+                      <select
+                        className="rounded border px-2 py-1"
+                        value={paymentMethod}
+                        onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'bank_transfer')}
+                      >
+                        <option value="cash">Cash</option>
+                        <option value="bank_transfer">Bank transfer</option>
+                      </select>
+                      <button
+                        className="rounded bg-emerald-700 px-3 py-1 text-white disabled:opacity-50"
+                        disabled={recordingPayment}
+                        onClick={() => submitPayment(inv.id)}
+                      >
+                        {recordingPayment ? 'Saving…' : 'Save'}
+                      </button>
+                      <button className="text-neutral-500" onClick={() => setPayingId(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                    {paymentError && <p className="text-xs text-red-600">{paymentError}</p>}
+                  </div>
+                )}
               </div>
             )
           })}
