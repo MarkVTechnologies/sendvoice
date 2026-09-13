@@ -11,6 +11,8 @@ import hostedRoutes from './routes/hosted.js'
 import wabaRoutes from './routes/waba.js'
 import userRoutes from './routes/users.js'
 import recurringRoutes from './routes/recurring.js'
+import gdprRoutes from './routes/gdpr.js'
+import customerRoutes from './routes/customers.js'
 import { redis } from './lib/redis.js'
 import { runDueRecurringSchedules } from './services/recurring.js'
 import { runDueReminders } from './services/reminders.js'
@@ -57,6 +59,8 @@ await app.register(webhookRoutes, { prefix: '/api' })
 await app.register(wabaRoutes, { prefix: '/api' })
 await app.register(userRoutes, { prefix: '/api' })
 await app.register(recurringRoutes, { prefix: '/api' })
+await app.register(gdprRoutes, { prefix: '/api' })
+await app.register(customerRoutes, { prefix: '/api' })
 await app.register(hostedRoutes) // public, unauthenticated — not under /api
 
 // PRD §8.4: in-process interval, not the BullMQ repeatable-job scaffolding

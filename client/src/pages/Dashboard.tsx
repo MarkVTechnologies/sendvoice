@@ -243,9 +243,14 @@ export default function Dashboard() {
     <div className="mx-auto flex max-w-lg flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Dashboard</h1>
-        <Link to="/recurring" className="text-xs text-emerald-700 underline">
-          Recurring schedules
-        </Link>
+        <div className="flex gap-3">
+          <Link to="/recurring" className="text-xs text-emerald-700 underline">
+            Recurring schedules
+          </Link>
+          <Link to="/privacy" className="text-xs text-emerald-700 underline">
+            Privacy &amp; data
+          </Link>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {stats.map((s) => (

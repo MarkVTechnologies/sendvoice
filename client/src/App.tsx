@@ -7,6 +7,7 @@ import Onboarding from './pages/Onboarding'
 import WhatsAppBusiness from './pages/WhatsAppBusiness'
 import Team from './pages/Team'
 import Recurring from './pages/Recurring'
+import Privacy from './pages/Privacy'
 import InstallPrompt from './components/InstallPrompt'
 import { api, type ApproveInvoicePayload } from './lib/api'
 import { useAuth } from './lib/auth'
@@ -96,6 +97,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <Recurring />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/privacy"
+            element={
+              <RequireAuth>
+                <Privacy />
               </RequireAuth>
             }
           />

@@ -92,6 +92,15 @@ export type Invoice = {
 
 export type TeamUser = { id: string; phone: string; name: string | null; role: string; joined: boolean }
 
+export type Customer = {
+  id: string
+  name: string
+  whatsapp: string | null
+  email: string | null
+  address: string | null
+  createdAt: string
+}
+
 export type Frequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
 
 export type RecurringScheduleView = {
@@ -222,6 +231,29 @@ export const api = {
     a.remove()
     URL.revokeObjectURL(url)
   },
+  // PRD §12 P1: GDPR/NDPR data export — the whole business's own data,
+  // same auth+download pattern as the CSV export above.
+  exportGdprData: async (): Promise<void> => {
+    const token = useAuth.getState().token
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/gdpr/export`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    } catch {
+      throw new ApiError('Could not reach the server')
+    }
+    if (!res.ok) throw new ApiError(`Data export failed: ${res.status}`, res.status)
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `sendvoice-data-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+  listCustomers: () => request<Customer[]>('/customers'),
+  eraseCustomer: (id: string) => request<{ ok: true }>(`/customers/${id}/erase`, { method: 'POST', body: '{}' }),
   // PRD §8.1 P1: multi-user with roles. Both invite and remove return a
   // result object (same reasoning as sendInvoiceViaRailB) since the normal
   // failure cases — phone already in use, can't remove the Owner — are
