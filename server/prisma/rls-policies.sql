@@ -47,6 +47,8 @@ alter table "PaymentProviderLink" enable row level security;
 alter table "PaymentProviderLink" force row level security;
 alter table "SendCostLedgerEntry" enable row level security;
 alter table "SendCostLedgerEntry" force row level security;
+alter table "RecurringSchedule" enable row level security;
+alter table "RecurringSchedule" force row level security;
 
 -- Direct tenantId tables: filter on the session-scoped tenant id.
 create policy tenant_isolation on "Tenant"
@@ -77,6 +79,9 @@ create policy tenant_isolation on "PaymentProviderLink"
   using ("tenantId" = current_setting('app.tenant_id', true));
 
 create policy tenant_isolation on "SendCostLedgerEntry"
+  using ("tenantId" = current_setting('app.tenant_id', true));
+
+create policy tenant_isolation on "RecurringSchedule"
   using ("tenantId" = current_setting('app.tenant_id', true));
 
 -- Child tables without their own tenantId: join up to the tenant-scoped parent.

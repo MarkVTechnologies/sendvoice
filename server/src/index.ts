@@ -10,7 +10,9 @@ import webhookRoutes from './routes/webhooks.js'
 import hostedRoutes from './routes/hosted.js'
 import wabaRoutes from './routes/waba.js'
 import userRoutes from './routes/users.js'
+import recurringRoutes from './routes/recurring.js'
 import { redis } from './lib/redis.js'
+import { runDueRecurringSchedules } from './services/recurring.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -53,7 +55,20 @@ await app.register(itemRoutes, { prefix: '/api' })
 await app.register(webhookRoutes, { prefix: '/api' })
 await app.register(wabaRoutes, { prefix: '/api' })
 await app.register(userRoutes, { prefix: '/api' })
+await app.register(recurringRoutes, { prefix: '/api' })
 await app.register(hostedRoutes) // public, unauthenticated — not under /api
+
+// PRD §8.4: in-process interval, not the BullMQ repeatable-job scaffolding
+// in jobs/queue.ts — that needs a real, separately-run worker process to
+// be production-correct, and nothing in this deployment starts one yet.
+// An interval inside the same server process is the honest MVP shape;
+// moving this to a real worker is a scaling concern, not a correctness
+// one, once one exists. Configurable since a dev/test cadence (seconds)
+// and a production one (minutes) are legitimately different needs.
+const RECURRING_CHECK_INTERVAL_MS = Number(process.env.RECURRING_CHECK_INTERVAL_MS ?? 15 * 60 * 1000)
+setInterval(() => {
+  runDueRecurringSchedules(app.log).catch((err) => app.log.error({ err }, 'recurring schedule sweep failed'))
+}, RECURRING_CHECK_INTERVAL_MS)
 
 const port = Number(process.env.PORT ?? 4000)
 app.listen({ port, host: '0.0.0.0' }).catch((err) => {

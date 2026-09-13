@@ -8,6 +8,7 @@ import { generateHostedToken, hostedTokenExpiry } from '../services/hostedToken.
 import { recordPayment } from '../services/payments.js'
 import { buildInvoicesCsv } from '../services/csvExport.js'
 import { sendInvoiceViaRailB } from '../services/railB.js'
+import { isFrequency, makeRecurringFromInvoice } from '../services/recurring.js'
 
 // Needs to be a real absolute URL — it goes into a wa.me pre-filled message
 // (Rail A), not just a client-side fetch. Defaults to localhost for dev;
@@ -265,6 +266,28 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     }
     return reply.send({ ok: true, deliveryId: result.deliveryId })
   })
+
+  // PRD §8.4 P1 / §11.4: "sends the same invoice to the same customer 3
+  // months running → prompt recurring" — a schedule is created FROM an
+  // existing invoice, not a separate composer flow.
+  app.post(
+    '/invoices/:id/make-recurring',
+    { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] },
+    async (req, reply) => {
+      const { tenantId } = req.user as { tenantId: string }
+      const { id } = req.params as { id: string }
+      const { frequency } = z.object({ frequency: z.string() }).parse(req.body)
+      if (!isFrequency(frequency)) {
+        return reply.code(400).send({ error: 'invalid_frequency' })
+      }
+
+      const result = await withTenant(tenantId, (tx) => makeRecurringFromInvoice(tx, tenantId, id, frequency))
+      if (!result.ok) {
+        return reply.code(409).send({ error: result.reason })
+      }
+      return reply.send({ ok: true, id: result.id })
+    },
+  )
 
   app.get('/invoices/:id/pdf', { preHandler: app.authenticate }, async (req, reply) => {
     const { tenantId } = req.user as { tenantId: string }

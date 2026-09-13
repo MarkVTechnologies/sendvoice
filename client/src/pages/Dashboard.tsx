@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { api, type Invoice } from '../lib/api'
+import { Link } from 'react-router-dom'
+import { api, type Frequency, type Invoice } from '../lib/api'
 import { buildWhatsAppSendLink } from '../lib/whatsapp'
 
 /**
@@ -53,6 +54,13 @@ export default function Dashboard() {
   // why, same honesty as Pay Now's disabled state before a PSP is wired.
   const [sendingRailBId, setSendingRailBId] = useState<string | null>(null)
   const [railBResult, setRailBResult] = useState<Record<string, string>>({})
+  // PRD §8.4 P1 / §11.4: "make recurring" from an existing invoice, one
+  // frequency choice per row (defaults to monthly — the common case) with
+  // no separate form, since the schedule can be paused/removed afterward
+  // from the Recurring page if the frequency ends up wrong.
+  const [recurringFrequency, setRecurringFrequency] = useState<Record<string, Frequency>>({})
+  const [makingRecurringId, setMakingRecurringId] = useState<string | null>(null)
+  const [recurringActionResult, setRecurringActionResult] = useState<Record<string, string>>({})
 
   useEffect(() => {
     api
@@ -166,6 +174,23 @@ export default function Dashboard() {
     }
   }
 
+  async function makeRecurring(invoiceId: string) {
+    const frequency = recurringFrequency[invoiceId] ?? 'monthly'
+    setMakingRecurringId(invoiceId)
+    setRecurringActionResult((prev) => ({ ...prev, [invoiceId]: '' }))
+    try {
+      const result = await api.makeRecurring(invoiceId, frequency)
+      setRecurringActionResult((prev) => ({
+        ...prev,
+        [invoiceId]: result.ok ? 'Recurring schedule created' : "Couldn't create a schedule",
+      }))
+    } catch {
+      setRecurringActionResult((prev) => ({ ...prev, [invoiceId]: "Couldn't create a schedule" }))
+    } finally {
+      setMakingRecurringId(null)
+    }
+  }
+
   async function exportCsv() {
     setExportError(null)
     setExporting(true)
@@ -204,7 +229,12 @@ export default function Dashboard() {
 
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-4 p-4">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <Link to="/recurring" className="text-xs text-emerald-700 underline">
+          Recurring schedules
+        </Link>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         {stats.map((s) => (
           <div key={s.label} className="rounded border p-3">
@@ -340,6 +370,32 @@ export default function Dashboard() {
                       >
                         {railBResult[inv.id]}
                       </span>
+                    )}
+                    {!isQuote && (
+                      <div className="flex items-center gap-1">
+                        <select
+                          className="rounded border px-1 py-0.5 text-xs"
+                          value={recurringFrequency[inv.id] ?? 'monthly'}
+                          onChange={(e) =>
+                            setRecurringFrequency((prev) => ({ ...prev, [inv.id]: e.target.value as Frequency }))
+                          }
+                        >
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="quarterly">Quarterly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
+                        <button
+                          className="text-xs text-emerald-700 underline disabled:opacity-50"
+                          disabled={makingRecurringId === inv.id}
+                          onClick={() => makeRecurring(inv.id)}
+                        >
+                          {makingRecurringId === inv.id ? 'Saving…' : 'Make recurring'}
+                        </button>
+                      </div>
+                    )}
+                    {recurringActionResult[inv.id] && (
+                      <span className="text-xs text-neutral-500">{recurringActionResult[inv.id]}</span>
                     )}
                   </div>
                 </div>

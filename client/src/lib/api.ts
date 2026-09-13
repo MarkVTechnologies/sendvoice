@@ -90,6 +90,19 @@ export type Invoice = {
 
 export type TeamUser = { id: string; phone: string; name: string | null; role: string; joined: boolean }
 
+export type Frequency = 'weekly' | 'monthly' | 'quarterly' | 'yearly'
+
+export type RecurringScheduleView = {
+  id: string
+  frequency: Frequency
+  active: boolean
+  nextRunAt: string
+  lastRunAt: string | null
+  lastDocumentId: string | null
+  currency: string
+  customerName: string
+}
+
 export type WabaTemplateStatus = { id: string; name: string; status: string; rejectionReason: string | null }
 
 export type WabaStatus = {
@@ -121,6 +134,32 @@ export const api = {
   // invoice linked back to the quote — the quote itself is never edited.
   convertQuote: (quoteId: string) =>
     request<Invoice>(`/invoices/${quoteId}/convert`, { method: 'POST', body: '{}' }),
+  // PRD §8.4 P1 / §11.4: create a recurring schedule from an existing
+  // invoice — same result-object shape as sendInvoiceViaRailB, since the
+  // failure cases (not an invoice, no customer) are specific and expected.
+  makeRecurring: async (
+    invoiceId: string,
+    frequency: Frequency,
+  ): Promise<{ ok: true; id: string } | { ok: false; reason: string }> => {
+    const token = useAuth.getState().token
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/invoices/${invoiceId}/make-recurring`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ frequency }),
+      })
+    } catch {
+      throw new ApiError('Could not reach the server')
+    }
+    const body = (await res.json().catch(() => ({}))) as { error?: string; id?: string }
+    if (!res.ok) return { ok: false, reason: body.error ?? 'unknown_error' }
+    return { ok: true, id: body.id! }
+  },
+  listRecurringSchedules: () => request<RecurringScheduleView[]>('/recurring'),
+  pauseRecurringSchedule: (id: string) => request<{ ok: true }>(`/recurring/${id}/pause`, { method: 'POST', body: '{}' }),
+  resumeRecurringSchedule: (id: string) => request<{ ok: true }>(`/recurring/${id}/resume`, { method: 'POST', body: '{}' }),
+  deleteRecurringSchedule: (id: string) => request<{ ok: true }>(`/recurring/${id}`, { method: 'DELETE', body: '{}' }),
   // PRD §8.7 P0: manual cash/bank-transfer recording, with partial support
   // — the server accumulates this the same way it would multiple PSP
   // payments, moving status to PARTIALLY_PAID or PAID as the total is met.

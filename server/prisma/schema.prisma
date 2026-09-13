@@ -125,6 +125,7 @@ model Tenant {
   items         Item[]
   waba          WabaConnection?
   paymentLinks  PaymentProviderLink[]
+  recurringSchedules RecurringSchedule[]
 }
 
 model User {
@@ -161,6 +162,7 @@ model Customer {
   createdAt    DateTime @default(now())
 
   documents Document[]
+  recurringSchedules RecurringSchedule[]
 
   @@index([tenantId])
   // PRD §8.2 P1 "duplicate detection on number": enforced here rather than
@@ -413,4 +415,35 @@ model SendCostLedgerEntry {
   occurredAt       DateTime @default(now())
 
   @@index([tenantId, occurredAt])
+}
+
+// PRD §8.4 P1 "recurring invoice schedules" / §11.4 conversion trigger
+// ("sends the same invoice to the same customer 3 months running → prompt
+// recurring"). Created from an existing invoice (routes/invoices.ts's
+// make-recurring, services/recurring.ts) rather than a separate composer
+// flow — a schedule is a snapshot of that invoice's lines, not a live
+// reference to it, since the source Document is immutable and independent
+// of whatever the schedule goes on to generate.
+model RecurringSchedule {
+  id         String   @id @default(cuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  lines      Json // snapshot: Array<{ description, qty, unit, rate, discount }>
+  currency   String
+  notes      String?
+  // Mirrors the source invoice's own issue-to-due gap (e.g. "net 14") onto
+  // every generated cycle, rather than a fixed calendar date that would
+  // make no sense on a recurring schedule.
+  dueDateOffsetDays Int?
+  frequency      String // weekly | monthly | quarterly | yearly
+  nextRunAt      DateTime
+  active         Boolean   @default(true)
+  lastRunAt      DateTime?
+  lastDocumentId String?
+  createdAt      DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([active, nextRunAt])
 }
