@@ -39,6 +39,9 @@ export default function Onboarding() {
   const [businessName, setBusinessName] = useState('')
   const [address, setAddress] = useState('')
   const [taxId, setTaxId] = useState('')
+  const [bankName, setBankName] = useState('')
+  const [bankAccountName, setBankAccountName] = useState('')
+  const [bankAccountNumber, setBankAccountNumber] = useState('')
   const [country, setCountry] = useState(detectCountry())
   const [currency, setCurrency] = useState(COUNTRY_DEFAULTS[detectCountry()].currency)
   const [noTax, setNoTax] = useState(true)
@@ -113,6 +116,9 @@ export default function Onboarding() {
         businessName: businessName || undefined,
         address: address || undefined,
         taxId: !noTax && taxId ? taxId : undefined,
+        bankName: bankName || undefined,
+        bankAccountName: bankAccountName || undefined,
+        bankAccountNumber: bankAccountNumber || undefined,
         country,
         currency,
         tax,
@@ -201,6 +207,30 @@ export default function Onboarding() {
               onChange={(e) => setAddress(e.target.value)}
             />
           </label>
+
+          <div className="flex flex-col gap-2 rounded border p-3 text-sm">
+            <p className="text-neutral-500">
+              Bank details <span className="text-neutral-400">(optional — for the "pay by transfer" instructions on your invoices)</span>
+            </p>
+            <input
+              className="rounded border px-3 py-2"
+              placeholder="Bank name"
+              value={bankName}
+              onChange={(e) => setBankName(e.target.value)}
+            />
+            <input
+              className="rounded border px-3 py-2"
+              placeholder="Account name"
+              value={bankAccountName}
+              onChange={(e) => setBankAccountName(e.target.value)}
+            />
+            <input
+              className="rounded border px-3 py-2"
+              placeholder="Account number"
+              value={bankAccountNumber}
+              onChange={(e) => setBankAccountNumber(e.target.value)}
+            />
+          </div>
 
           <div className="flex items-center gap-3">
             {logoPreview && (

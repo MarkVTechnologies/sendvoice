@@ -1,5 +1,5 @@
 import { tenantLogoDataUri } from '../logo.js'
-import { type InvoiceData, escapeHtml, formatDate, money } from './shared.js'
+import { type InvoiceData, escapeHtml, formatDate, money, renderBankDetailsBlock } from './shared.js'
 
 /**
  * PRD §8.5 P0's second template — deliberately structural differences from
@@ -119,6 +119,8 @@ export function renderModernTemplate(doc: InvoiceData): string {
   .totals .balance-row td.num { background: #eeb902; border-radius: 6px; padding: 4px 8px; }
   .notes { margin-top: 32px; font-size: 12px; color: #555; }
   .notes h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #6b7290; margin: 0 0 6px; }
+  .bank-details { margin-top: 20px; font-size: 12px; color: #555; }
+  .bank-details h2 { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em; color: #6b7290; margin: 0 0 6px; }
   .footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e5e5ee; font-size: 10.5px; color: #9aa0b8; text-align: center; }
 </style>
 </head>
@@ -186,6 +188,7 @@ export function renderModernTemplate(doc: InvoiceData): string {
     </div>
 
     ${doc.notes ? `<div class="notes"><h2>Notes</h2>${escapeHtml(doc.notes)}</div>` : ''}
+    ${renderBankDetailsBlock(doc)}
 
     <div class="footer">Invoiced with Sendvoice</div>
   </div>

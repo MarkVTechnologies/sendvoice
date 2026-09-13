@@ -44,3 +44,31 @@ export async function recordHostedView(tenantId: string, documentId: string): Pr
     })
   })
 }
+
+/**
+ * PRD §7.3/§10.2: a quote's "accept/decline" response, captured from the
+ * public hosted page (a plain form POST — no WhatsApp quick-reply buttons
+ * exist yet, since Rail B doesn't). Conditional on the current status the
+ * same way recordHostedView is: only APPROVED/VIEWED quotes can still be
+ * responded to, so a customer re-submitting (a double-tap, a page reload
+ * after already answering) can never flip an already-answered quote, and
+ * this can never touch an INVOICE — accept/decline is meaningless there.
+ */
+export async function respondToQuote(
+  tenantId: string,
+  documentId: string,
+  response: 'accept' | 'decline',
+): Promise<boolean> {
+  return withTenant(tenantId, async (tx) => {
+    const result = await tx.document.updateMany({
+      where: { id: documentId, docType: 'QUOTE', status: { in: ['APPROVED', 'VIEWED'] } },
+      data: { status: response === 'accept' ? 'ACCEPTED' : 'DECLINED' },
+    })
+    if (result.count > 0) {
+      await tx.documentEvent.create({
+        data: { documentId, type: response === 'accept' ? 'quote_accepted' : 'quote_declined' },
+      })
+    }
+    return result.count > 0
+  })
+}

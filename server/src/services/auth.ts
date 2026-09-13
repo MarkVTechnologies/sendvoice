@@ -14,6 +14,9 @@ export type OnboardingInput = {
   referralSource?: string
   address?: string
   taxId?: string
+  bankName?: string
+  bankAccountName?: string
+  bankAccountNumber?: string
 }
 
 /**
@@ -59,6 +62,9 @@ export async function resolveOrCreateIdentity(phone: string, input: OnboardingIn
         referralSource: input.referralSource?.trim() || undefined,
         address: input.address?.trim() || undefined,
         taxId: input.taxId?.trim() || undefined,
+        bankName: input.bankName?.trim() || undefined,
+        bankAccountName: input.bankAccountName?.trim() || undefined,
+        bankAccountNumber: input.bankAccountNumber?.trim() || undefined,
       },
     })
     await tx.user.create({

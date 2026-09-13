@@ -27,6 +27,33 @@ function formatDate(d: Date | null): string {
 }
 
 /**
+ * PRD §8.7 P1: "Bank transfer instructions rendered on the PDF with a
+ * copy-to-clipboard account number." The PDF is static (no clipboard on a
+ * saved file), so the copy button lives here instead. Progressive
+ * enhancement, not a requirement: the account number is plain visible text
+ * either way (PRD §9.1 "works with JS disabled for the core view") — the
+ * inline onclick just adds a convenience on top when JS is available.
+ * Only for an INVOICE with an account number actually on file.
+ */
+function renderBankBlock(doc: InvoiceData): string {
+  if (doc.docType !== 'INVOICE' || !doc.tenant.bankAccountNumber) return ''
+  const accountNumber = doc.tenant.bankAccountNumber
+  return `
+    <div class="bank-block">
+      <p class="bank-heading">Or pay by bank transfer</p>
+      ${doc.tenant.bankName ? `<div class="bank-row"><span>Bank</span><span>${escapeHtml(doc.tenant.bankName)}</span></div>` : ''}
+      ${doc.tenant.bankAccountName ? `<div class="bank-row"><span>Account name</span><span>${escapeHtml(doc.tenant.bankAccountName)}</span></div>` : ''}
+      <div class="bank-row">
+        <span>Account number</span>
+        <span class="bank-account-number">
+          <code>${escapeHtml(accountNumber)}</code>
+          <button type="button" class="copy-btn" onclick="var b=this;navigator.clipboard.writeText(${JSON.stringify(accountNumber)}).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)})">Copy</button>
+        </span>
+      </div>
+    </div>`
+}
+
+/**
  * PRD §8.6 P0: "mobile-optimised hosted invoice page (no login, tokenised
  * URL) showing line items, total, due date, and a prominent Pay Now button
  * routing to the merchant's connected payment provider."
@@ -39,9 +66,24 @@ function formatDate(d: Date | null): string {
  * Pay Now has no payment provider to route to yet (Phase 1) — shown as an
  * honest disabled state, not a button that silently does nothing.
  */
+// PRD §7.3: doc types share one hosted-page engine; only the label and the
+// action area (Pay Now vs. Accept/Decline) differ.
+const DOC_LABEL: Record<string, string> = {
+  QUOTE: 'Quote',
+  PROFORMA: 'Proforma',
+  INVOICE: 'Invoice',
+  CREDIT_NOTE: 'Credit note',
+  RECEIPT: 'Receipt',
+  DELIVERY_NOTE: 'Delivery note',
+  STATEMENT: 'Statement',
+}
+
 export function renderHostedInvoicePage(doc: InvoiceData): string {
   const businessName = escapeHtml(doc.tenant.tradingName || doc.tenant.legalName)
   const balance = Number(doc.total) - Number(doc.amountPaid)
+  const docLabel = DOC_LABEL[doc.docType] ?? doc.docType
+  const isQuote = doc.docType === 'QUOTE'
+  const isRespondable = isQuote && (doc.status === 'APPROVED' || doc.status === 'VIEWED')
   // Trades against the ≤60KB critical-path budget above for tenants with a
   // logo — inlined the same way as the PDF (no separate serving route to
   // maintain), but unlike the PDF this page's budget actually cares. Worth
@@ -70,7 +112,7 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${doc.number ?? 'Invoice'} · ${businessName}</title>
+<title>${doc.number ?? docLabel} · ${businessName}</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -123,6 +165,21 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
   }
   .pay.disabled { background: #eee; color: #999; }
   .pay-note { text-align: center; font-size: 12px; color: #999; margin-top: 8px; }
+  .respond { display: flex; gap: 10px; margin-top: 24px; }
+  .respond form { flex: 1; margin: 0; }
+  .respond button { width: 100%; padding: 15px; border-radius: 10px; font-size: 16px; font-weight: 600; border: none; }
+  .respond .accept { background: #0b5d3b; color: #fff; }
+  .respond .decline { background: #f2ecec; color: #7a2e2e; }
+  .response-banner {
+    margin-top: 24px;
+    padding: 14px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .response-banner.accepted { background: #e3eee7; color: #0b5d3b; }
+  .response-banner.declined { background: #f2ecec; color: #7a2e2e; }
   .pdf-link {
     display: block;
     text-align: center;
@@ -135,6 +192,12 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
   .footer { text-align: center; margin-top: 24px; font-size: 11.5px; }
   .footer-cta { color: #999; text-decoration: none; }
   .footer-cta:hover { text-decoration: underline; }
+  .bank-block { margin-top: 20px; padding: 14px 16px; border: 1px solid #eee; border-radius: 10px; }
+  .bank-heading { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: #555; }
+  .bank-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 3px 0; font-size: 13px; }
+  .bank-row span:first-child { color: #999; }
+  .bank-account-number { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .copy-btn { border: 1px solid #ddd; background: #fafafa; color: #555; font-size: 11px; padding: 3px 8px; border-radius: 6px; }
 </style>
 </head>
 <body>
@@ -149,11 +212,11 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
             </div>`
           : ''
       }
-      <h1>${doc.number ?? 'Invoice'}</h1>
+      <h1>${doc.number ?? docLabel}</h1>
       <span class="status">${escapeHtml(doc.status)}</span>
 
       <div class="to">
-        Billed to<br/>
+        ${isQuote ? 'Quoted to' : 'Billed to'}<br/>
         <strong>${escapeHtml(doc.customer.name)}</strong>
       </div>
       <div class="meta">
@@ -175,8 +238,28 @@ export function renderHostedInvoicePage(doc: InvoiceData): string {
         }
       </div>
 
-      <button class="pay disabled" disabled>Pay Now</button>
-      <p class="pay-note">Online payment isn't set up for this business yet.</p>
+      ${
+        isQuote
+          ? isRespondable
+            ? `<div class="respond">
+                 <form method="post" action="/i/${doc.hostedToken}/respond">
+                   <input type="hidden" name="response" value="decline" />
+                   <button type="submit" class="decline">Decline</button>
+                 </form>
+                 <form method="post" action="/i/${doc.hostedToken}/respond">
+                   <input type="hidden" name="response" value="accept" />
+                   <button type="submit" class="accept">Accept quote</button>
+                 </form>
+               </div>`
+            : doc.status === 'ACCEPTED'
+              ? `<div class="response-banner accepted">You accepted this quote</div>`
+              : doc.status === 'DECLINED'
+                ? `<div class="response-banner declined">You declined this quote</div>`
+                : ''
+          : `<button class="pay disabled" disabled>Pay Now</button>
+             <p class="pay-note">Online payment isn't set up for this business yet.</p>`
+      }
+      ${renderBankBlock(doc)}
 
       <a class="pdf-link" href="/i/${doc.hostedToken}/pdf">Download PDF</a>
     </div>

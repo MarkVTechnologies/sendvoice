@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, ApiError, type Invoice, type ItemSuggestion } from '../lib/api'
+import { api, ApiError, type DocType, type Invoice, type ItemSuggestion } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { enqueue } from '../lib/outbox'
 import { buildWhatsAppSendLink } from '../lib/whatsapp'
 import { deleteDraft, loadLatestDraft, saveDraft } from '../lib/drafts'
+import { contactPickerSupported, pickContact } from '../lib/contacts'
+import { useInstallState } from '../lib/install'
 
 type Line = { id: string; description: string; qty: number; rate: number }
 
@@ -28,7 +30,12 @@ const ITEM_SEARCH_DEBOUNCE_MS = 250
  */
 export default function Composer() {
   const clearSession = useAuth((s) => s.clear)
+  const markFirstInvoiceSent = useInstallState((s) => s.markFirstInvoiceSent)
   const [draftId, setDraftId] = useState<string>(() => crypto.randomUUID())
+  // PRD §7.3: one composer, one shared engine — a quote and an invoice are
+  // the same document, differing only in this choice (and which numbering
+  // series/label it draws from server-side).
+  const [docType, setDocType] = useState<DocType>('INVOICE')
   const [customerName, setCustomerName] = useState('')
   const [customerWhatsapp, setCustomerWhatsapp] = useState('')
   const [lines, setLines] = useState<Line[]>([
@@ -118,6 +125,7 @@ export default function Composer() {
   function resetDraft() {
     deleteDraft(draftId)
     setDraftId(crypto.randomUUID())
+    setDocType('INVOICE')
     setCustomerName('')
     setCustomerWhatsapp('')
     setLines([{ id: crypto.randomUUID(), description: '', qty: 1, rate: 0 }])
@@ -135,6 +143,7 @@ export default function Composer() {
       // <input type="date"> gives "YYYY-MM-DD"; a date-only string parses as
       // UTC midnight per spec, so this is consistent across browsers.
       dueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
+      docType,
     }
 
     if (!navigator.onLine) {
@@ -151,6 +160,9 @@ export default function Composer() {
       await deleteDraft(draftId)
       setSentInvoice(invoice)
       setStatus('sent')
+      // PRD §9.1 P0: the Android install prompt is deferred until "after
+      // the first successful invoice send" — a quote isn't that moment.
+      if (invoice.docType === 'INVOICE') markFirstInvoiceSent()
       // Rail A (PRD §6.1 J1): "Approve & Send" means WhatsApp opens with the
       // message pre-filled right away — the merchant's last step is tapping
       // send inside WhatsApp, not a separate click in our app. window.open
@@ -158,7 +170,10 @@ export default function Composer() {
       // survives popup blockers; the Sent screen below keeps a manual
       // button as a fallback in case it doesn't.
       if (invoice.customer.whatsapp && invoice.hostedUrl) {
-        window.open(buildWhatsAppSendLink(invoice.customer.whatsapp, invoice.number, invoice.hostedUrl), '_blank')
+        window.open(
+          buildWhatsAppSendLink(invoice.customer.whatsapp, invoice.number, invoice.hostedUrl, invoice.docType),
+          '_blank',
+        )
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
@@ -171,9 +186,10 @@ export default function Composer() {
   }
 
   if (status === 'sent' && sentInvoice) {
+    const isQuote = sentInvoice.docType === 'QUOTE'
     return (
       <div className="mx-auto flex max-w-lg flex-col gap-4 p-6 text-center">
-        <h1 className="text-xl font-semibold text-emerald-700">Sent</h1>
+        <h1 className="text-xl font-semibold text-emerald-700">{isQuote ? 'Quote sent' : 'Sent'}</h1>
         <p className="text-3xl font-semibold">{sentInvoice.number}</p>
         <p className="text-neutral-600">
           {sentInvoice.currency} {sentInvoice.total} to {sentInvoice.customer.name}
@@ -183,7 +199,12 @@ export default function Composer() {
             className="rounded bg-emerald-600 px-4 py-2 text-white"
             onClick={() =>
               window.open(
-                buildWhatsAppSendLink(sentInvoice.customer.whatsapp!, sentInvoice.number, sentInvoice.hostedUrl!),
+                buildWhatsAppSendLink(
+                  sentInvoice.customer.whatsapp!,
+                  sentInvoice.number,
+                  sentInvoice.hostedUrl!,
+                  sentInvoice.docType,
+                ),
                 '_blank',
               )
             }
@@ -203,7 +224,7 @@ export default function Composer() {
           </button>
         )}
         <button className="mt-4 rounded border px-4 py-2" onClick={resetDraft}>
-          New invoice
+          {isQuote ? 'New quote' : 'New invoice'}
         </button>
       </div>
     )
@@ -211,7 +232,27 @@ export default function Composer() {
 
   return (
     <div className="mx-auto flex max-w-lg flex-col gap-4 p-4">
-      <h1 className="text-xl font-semibold">New invoice</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">{docType === 'QUOTE' ? 'New quote' : 'New invoice'}</h1>
+        {/* PRD §7.3: one composer, a doc-type toggle rather than a
+            separate screen — the shared engine's whole point. */}
+        <div className="flex rounded border p-0.5 text-sm">
+          <button
+            type="button"
+            className={`rounded px-3 py-1 ${docType === 'INVOICE' ? 'bg-emerald-700 text-white' : 'text-neutral-600'}`}
+            onClick={() => setDocType('INVOICE')}
+          >
+            Invoice
+          </button>
+          <button
+            type="button"
+            className={`rounded px-3 py-1 ${docType === 'QUOTE' ? 'bg-emerald-700 text-white' : 'text-neutral-600'}`}
+            onClick={() => setDocType('QUOTE')}
+          >
+            Quote
+          </button>
+        </div>
+      </div>
 
       <div className="flex flex-col gap-2 rounded border p-3">
         <input
@@ -226,6 +267,19 @@ export default function Composer() {
           value={customerWhatsapp}
           onChange={(e) => setCustomerWhatsapp(e.target.value)}
         />
+        {contactPickerSupported() && (
+          <button
+            type="button"
+            className="self-start text-sm text-emerald-700"
+            onClick={async () => {
+              const contact = await pickContact()
+              if (contact?.name) setCustomerName(contact.name)
+              if (contact?.tel) setCustomerWhatsapp(contact.tel)
+            }}
+          >
+            Pick from contacts
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -302,7 +356,7 @@ export default function Composer() {
           status === 'sending' || !customerWhatsapp || lines.every((l) => !l.description)
         }
       >
-        {status === 'sending' ? 'Sending…' : 'Approve & Send'}
+        {status === 'sending' ? 'Sending…' : docType === 'QUOTE' ? 'Approve & Send Quote' : 'Approve & Send'}
       </button>
 
       {status === 'queued' && (

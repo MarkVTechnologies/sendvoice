@@ -42,6 +42,11 @@ const verifyOtpSchema = z.object({
   // Same gap, same spot: Tenant.taxId existed and rendered in all three
   // templates, but nothing ever collected it.
   taxId: z.string().max(100).optional(),
+  // PRD §8.1 P0 "bank details" onboarding field, feeding §8.7 P1's bank
+  // transfer instructions on the PDF. All optional/skippable.
+  bankName: z.string().max(200).optional(),
+  bankAccountName: z.string().max(200).optional(),
+  bankAccountNumber: z.string().max(100).optional(),
 })
 
 /**
@@ -76,8 +81,22 @@ export default async function authRoutes(app: FastifyInstance) {
   })
 
   app.post('/auth/otp/verify', async (req, reply) => {
-    const { phone, code, businessName, country, currency, tax, logo, pdfTemplate, referralSource, address, taxId } =
-      verifyOtpSchema.parse(req.body)
+    const {
+      phone,
+      code,
+      businessName,
+      country,
+      currency,
+      tax,
+      logo,
+      pdfTemplate,
+      referralSource,
+      address,
+      taxId,
+      bankName,
+      bankAccountName,
+      bankAccountNumber,
+    } = verifyOtpSchema.parse(req.body)
 
     const ok = await verifyOtp(phone, code)
     if (!ok) {
@@ -93,6 +112,9 @@ export default async function authRoutes(app: FastifyInstance) {
       referralSource,
       address,
       taxId,
+      bankName,
+      bankAccountName,
+      bankAccountNumber,
       logo: logo ? { data: Buffer.from(logo.dataBase64, 'base64'), mimeType: logo.mimeType } : undefined,
     })
     const token = await reply.jwtSign(identity)

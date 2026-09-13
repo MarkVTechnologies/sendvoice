@@ -4,6 +4,7 @@ import Composer from './pages/Composer'
 import Dashboard from './pages/Dashboard'
 import Items from './pages/Items'
 import Onboarding from './pages/Onboarding'
+import InstallPrompt from './components/InstallPrompt'
 import { api, type ApproveInvoicePayload } from './lib/api'
 import { useAuth } from './lib/auth'
 import { flushOutbox, watchConnectivity } from './lib/outbox'
@@ -59,6 +60,7 @@ export default function App() {
           />
         </Routes>
       </main>
+      {token && <InstallPrompt />}
       {token && (
         <nav className="flex justify-around border-t bg-white p-2 text-sm">
           <NavLink to="/">New invoice</NavLink>

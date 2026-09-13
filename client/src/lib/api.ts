@@ -45,13 +45,21 @@ export type OnboardingDetails = {
   referralSource?: string
   address?: string
   taxId?: string
+  bankName?: string
+  bankAccountName?: string
+  bankAccountNumber?: string
 }
+
+export type DocType = 'INVOICE' | 'QUOTE'
 
 export type ApproveInvoicePayload = {
   customer: { name: string; whatsapp: string }
   lines: Array<{ description: string; qty?: number; unit?: string; rate: number }>
   dueDate?: string // full ISO 8601 datetime — the server's zod schema requires it, not just a date
   notes?: string
+  // PRD §7.3: the same approval endpoint issues either doc type — omitted
+  // means INVOICE, matching the server's own default.
+  docType?: DocType
 }
 
 export type ItemSuggestion = {
@@ -74,6 +82,10 @@ export type Invoice = {
   pdfUrl: string | null
   hostedUrl: string | null
   customer: { name: string; whatsapp: string | null }
+  docType: DocType
+  // Set on an invoice that was converted from a quote — points back at the
+  // quote's Document id (PRD §7.3 "preserves the link for audit").
+  convertedFromId: string | null
 }
 
 export const api = {
@@ -93,6 +105,10 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   listInvoices: () => request<Invoice[]>('/invoices'),
+  // PRD §7.3: "Quote→Invoice conversion is one tap." Creates a brand-new
+  // invoice linked back to the quote — the quote itself is never edited.
+  convertQuote: (quoteId: string) =>
+    request<Invoice>(`/invoices/${quoteId}/convert`, { method: 'POST', body: '{}' }),
   // PRD §12 P0: hosted links must be revocable. Mints a fresh token and
   // discards the old one — the response's hostedUrl is the new live link.
   revokeHostedLink: (invoiceId: string) =>

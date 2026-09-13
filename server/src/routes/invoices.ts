@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { withTenant } from '../lib/prisma.js'
-import { approveInvoice } from '../services/invoices.js'
+import { approveInvoice, convertQuoteToInvoice } from '../services/invoices.js'
 import { renderAndStorePdf } from '../services/pdf.js'
 import { generateHostedToken, hostedTokenExpiry } from '../services/hostedToken.js'
 
@@ -31,6 +31,10 @@ const approveSchema = z.object({
   currency: z.string().length(3).optional(),
   dueDate: z.string().datetime().optional(),
   notes: z.string().optional(),
+  // PRD §7.3: "shared engine, different label + numbering series" — a
+  // quote goes through this same approval endpoint, distinguished only by
+  // docType. Defaults to INVOICE so no existing caller needs to change.
+  docType: z.enum(['INVOICE', 'QUOTE']).optional(),
 })
 
 /**
@@ -126,6 +130,32 @@ export default async function invoiceRoutes(app: FastifyInstance) {
 
     if (!result) return reply.code(404).send({ error: 'invoice_not_found' })
     return reply.send({ hostedUrl: hostedUrl(result.hostedToken) })
+  })
+
+  // PRD §7.3: "Quote→Invoice conversion is one tap and preserves the link
+  // for audit." Never edits the quote — creates a new, separately-numbered
+  // INVOICE document instead (services/invoices.ts's convertQuoteToInvoice).
+  app.post('/invoices/:id/convert', { preHandler: app.authenticate }, async (req, reply) => {
+    const { tenantId } = req.user as { tenantId: string }
+    const { id } = req.params as { id: string }
+
+    const result = await withTenant(tenantId, (tx) => convertQuoteToInvoice(tx, tenantId, id))
+    if (!result) return reply.code(404).send({ error: 'quote_not_found' })
+
+    const { document, created, ttfiMs } = result
+    if (ttfiMs !== undefined) {
+      req.log.info({ tenantId, ttfiMs }, 'ttfi: time to first invoice (via quote conversion)')
+    }
+    if (created) {
+      await renderAndStorePdf(tenantId, document.id)
+    }
+
+    const { hostedToken, ...rest } = document
+    return reply.send({
+      ...rest,
+      pdfUrl: `/api/invoices/${document.id}/pdf`,
+      hostedUrl: hostedUrl(hostedToken),
+    })
   })
 
   app.get('/invoices/:id/pdf', { preHandler: app.authenticate }, async (req, reply) => {

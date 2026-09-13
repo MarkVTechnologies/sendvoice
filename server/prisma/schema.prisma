@@ -40,6 +40,11 @@ enum DocStatus {
   PAID
   OVERDUE
   VOID
+  // Quote-only responses (PRD §7.3/§10.2 "accept/decline"), captured from
+  // the public hosted page — a plain form POST, not a WhatsApp quick-reply
+  // button, since Rail B doesn't exist yet. Never used on an INVOICE.
+  ACCEPTED
+  DECLINED
 }
 
 enum LineType {
@@ -100,6 +105,16 @@ model Tenant {
   // long before anyone analyzes this; resolving it is an analysis-time
   // concern, not a signup-time one. Null means organic/direct signup.
   referralSource String?
+  // PRD §8.1 P0 onboarding field ("bank details") / §8.7 P1 ("bank transfer
+  // instructions rendered on the PDF with a copy-to-clipboard account
+  // number"). Structured (not one free-text block like address) because the
+  // account number specifically needs to be its own copyable field, not
+  // buried in a paragraph. All optional/skippable — a merchant who only
+  // takes cash never needs these, and rendering is conditional on
+  // bankAccountNumber being set (see pdf/shared.ts, hostedInvoicePage.ts).
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
   createdAt      DateTime @default(now())
 
   users         User[]
