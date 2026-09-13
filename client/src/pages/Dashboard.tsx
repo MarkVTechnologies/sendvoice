@@ -174,6 +174,18 @@ export default function Dashboard() {
     }
   }
 
+  async function toggleReminders(inv: Invoice) {
+    try {
+      if (inv.remindersPaused) await api.resumeReminders(inv.id)
+      else await api.pauseReminders(inv.id)
+      setInvoices((prev) =>
+        prev?.map((i) => (i.id === inv.id ? { ...i, remindersPaused: !i.remindersPaused } : i)) ?? prev,
+      )
+    } catch {
+      setError("Couldn't update reminders for that invoice.")
+    }
+  }
+
   async function makeRecurring(invoiceId: string) {
     const frequency = recurringFrequency[invoiceId] ?? 'monthly'
     setMakingRecurringId(invoiceId)
@@ -396,6 +408,11 @@ export default function Dashboard() {
                     )}
                     {recurringActionResult[inv.id] && (
                       <span className="text-xs text-neutral-500">{recurringActionResult[inv.id]}</span>
+                    )}
+                    {!isQuote && inv.dueDate && (
+                      <button className="text-xs text-neutral-500 underline" onClick={() => toggleReminders(inv)}>
+                        {inv.remindersPaused ? 'Resume reminders' : 'Pause reminders'}
+                      </button>
                     )}
                   </div>
                 </div>

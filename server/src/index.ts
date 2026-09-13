@@ -13,6 +13,7 @@ import userRoutes from './routes/users.js'
 import recurringRoutes from './routes/recurring.js'
 import { redis } from './lib/redis.js'
 import { runDueRecurringSchedules } from './services/recurring.js'
+import { runDueReminders } from './services/reminders.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -69,6 +70,14 @@ const RECURRING_CHECK_INTERVAL_MS = Number(process.env.RECURRING_CHECK_INTERVAL_
 setInterval(() => {
   runDueRecurringSchedules(app.log).catch((err) => app.log.error({ err }, 'recurring schedule sweep failed'))
 }, RECURRING_CHECK_INTERVAL_MS)
+
+// PRD §8.6 P1: same in-process-interval shape and reasoning as recurring
+// schedules above — stays dormant (no-op) for every tenant until Rail B is
+// actually connected and invoice_reminder_due/overdue are approved.
+const REMINDER_CHECK_INTERVAL_MS = Number(process.env.REMINDER_CHECK_INTERVAL_MS ?? 15 * 60 * 1000)
+setInterval(() => {
+  runDueReminders(app.log).catch((err) => app.log.error({ err }, 'reminder sweep failed'))
+}, REMINDER_CHECK_INTERVAL_MS)
 
 const port = Number(process.env.PORT ?? 4000)
 app.listen({ port, host: '0.0.0.0' }).catch((err) => {

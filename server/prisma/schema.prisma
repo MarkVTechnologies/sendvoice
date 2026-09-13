@@ -264,6 +264,12 @@ model Document {
   // is the one other legitimate cross-tenant lookup in the app.
   hostedToken           String?   @unique
   hostedTokenExpiresAt  DateTime?
+  // PRD §8.6 P1 / §6.4: "a polite pre-due reminder, a due-date nudge, and
+  // configurable overdue follow-ups... all pausable per invoice." Which
+  // reminder stages have already fired lives on DocumentEvent (type
+  // 'reminder_sent', reusing the existing audit-log pattern rather than
+  // new columns per stage) — this is only the merchant's on/off switch.
+  remindersPaused Boolean @default(false)
   approvedAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

@@ -9,6 +9,7 @@ import { recordPayment } from '../services/payments.js'
 import { buildInvoicesCsv } from '../services/csvExport.js'
 import { sendInvoiceViaRailB } from '../services/railB.js'
 import { isFrequency, makeRecurringFromInvoice } from '../services/recurring.js'
+import { pauseReminders, resumeReminders } from '../services/reminders.js'
 
 // Needs to be a real absolute URL — it goes into a wa.me pre-filled message
 // (Rail A), not just a client-side fetch. Defaults to localhost for dev;
@@ -286,6 +287,31 @@ export default async function invoiceRoutes(app: FastifyInstance) {
         return reply.code(409).send({ error: result.reason })
       }
       return reply.send({ ok: true, id: result.id })
+    },
+  )
+
+  // PRD §8.6 P1 / §6.4: "all pausable per invoice."
+  app.post(
+    '/invoices/:id/reminders/pause',
+    { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] },
+    async (req, reply) => {
+      const { tenantId } = req.user as { tenantId: string }
+      const { id } = req.params as { id: string }
+      const ok = await withTenant(tenantId, (tx) => pauseReminders(tx, tenantId, id))
+      if (!ok) return reply.code(404).send({ error: 'invoice_not_found' })
+      return reply.send({ ok: true })
+    },
+  )
+
+  app.post(
+    '/invoices/:id/reminders/resume',
+    { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] },
+    async (req, reply) => {
+      const { tenantId } = req.user as { tenantId: string }
+      const { id } = req.params as { id: string }
+      const ok = await withTenant(tenantId, (tx) => resumeReminders(tx, tenantId, id))
+      if (!ok) return reply.code(404).send({ error: 'invoice_not_found' })
+      return reply.send({ ok: true })
     },
   )
 

@@ -86,6 +86,8 @@ export type Invoice = {
   // Set on an invoice that was converted from a quote — points back at the
   // quote's Document id (PRD §7.3 "preserves the link for audit").
   convertedFromId: string | null
+  // PRD §8.6 P1: "all pausable per invoice."
+  remindersPaused: boolean
 }
 
 export type TeamUser = { id: string; phone: string; name: string | null; role: string; joined: boolean }
@@ -157,6 +159,11 @@ export const api = {
     return { ok: true, id: body.id! }
   },
   listRecurringSchedules: () => request<RecurringScheduleView[]>('/recurring'),
+  // PRD §8.6 P1: reminders are pausable per invoice.
+  pauseReminders: (invoiceId: string) =>
+    request<{ ok: true }>(`/invoices/${invoiceId}/reminders/pause`, { method: 'POST', body: '{}' }),
+  resumeReminders: (invoiceId: string) =>
+    request<{ ok: true }>(`/invoices/${invoiceId}/reminders/resume`, { method: 'POST', body: '{}' }),
   pauseRecurringSchedule: (id: string) => request<{ ok: true }>(`/recurring/${id}/pause`, { method: 'POST', body: '{}' }),
   resumeRecurringSchedule: (id: string) => request<{ ok: true }>(`/recurring/${id}/resume`, { method: 'POST', body: '{}' }),
   deleteRecurringSchedule: (id: string) => request<{ ok: true }>(`/recurring/${id}`, { method: 'DELETE', body: '{}' }),
