@@ -135,6 +135,13 @@ model User {
   name     String?
   role     Role   @default(OWNER)
   createdAt DateTime @default(now())
+  // PRD §8.1 P1 "multi-user with roles": null means invited but never
+  // actually logged in yet (services/users.ts's inviteUser creates the row
+  // directly, since resolve_user_by_phone — the same SECURITY DEFINER
+  // lookup normal login already uses — needs a real row to find). Set on
+  // first successful OTP verify for that phone (services/auth.ts), and at
+  // creation time for a brand-new Owner signup, who is active immediately.
+  joinedAt DateTime?
 
   @@index([tenantId])
 }

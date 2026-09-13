@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import Items from './pages/Items'
 import Onboarding from './pages/Onboarding'
 import WhatsAppBusiness from './pages/WhatsAppBusiness'
+import Team from './pages/Team'
 import InstallPrompt from './components/InstallPrompt'
 import { api, type ApproveInvoicePayload } from './lib/api'
 import { useAuth } from './lib/auth'
@@ -13,6 +14,18 @@ import { flushOutbox, watchConnectivity } from './lib/outbox'
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = useAuth((s) => s.token)
   return token ? <>{children}</> : <Navigate to="/onboarding" replace />
+}
+
+// PRD §8.1 P1: a Viewer/Accountant can't approve or send anything, so
+// landing them on the composer is a dead end, not a permission the server
+// even needs to reject — redirect to the one place they actually have
+// something to do. `role === null` (a pre-existing session's JWT predates
+// this feature) defaults to full access, matching the server's own
+// requireRole fallback (server/src/lib/authz.ts).
+function RequireWriteAccess({ children }: { children: React.ReactNode }) {
+  const role = useAuth((s) => s.role)
+  if (role === 'VIEWER' || role === 'ACCOUNTANT') return <Navigate to="/dashboard" replace />
+  return <>{children}</>
 }
 
 export default function App() {
@@ -38,7 +51,9 @@ export default function App() {
             path="/"
             element={
               <RequireAuth>
-                <Composer />
+                <RequireWriteAccess>
+                  <Composer />
+                </RequireWriteAccess>
               </RequireAuth>
             }
           />
@@ -67,6 +82,14 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/team"
+            element={
+              <RequireAuth>
+                <Team />
+              </RequireAuth>
+            }
+          />
         </Routes>
       </main>
       {token && <InstallPrompt />}
@@ -76,6 +99,7 @@ export default function App() {
           <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/items">Items</NavLink>
           <NavLink to="/whatsapp">WhatsApp</NavLink>
+          <NavLink to="/team">Team</NavLink>
         </nav>
       )}
     </div>

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import { withTenant } from '../lib/prisma.js'
+import { requireRole } from '../lib/authz.js'
 import { approveInvoice, convertQuoteToInvoice } from '../services/invoices.js'
 import { renderAndStorePdf } from '../services/pdf.js'
 import { generateHostedToken, hostedTokenExpiry } from '../services/hostedToken.js'
@@ -118,7 +119,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   // invoice already created instead of minting a second one. There is no
   // server-side staged-drafts table yet (tracked in the plan), so the full
   // draft payload travels in the request body every time.
-  app.post('/invoices/:draftId/approve', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/invoices/:draftId/approve', { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] }, async (req, reply) => {
     const { tenantId } = req.user as { tenantId: string }
     const { draftId } = req.params as { draftId: string }
     const input = approveSchema.parse(req.body)
@@ -162,7 +163,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   // isn't left with a dead invoice — a new, live link is ready to re-share.
   // A DocumentEvent records it, closing the "documented reason/log is
   // remaining work" gap noted on Document.hostedToken in schema.prisma.
-  app.post('/invoices/:id/revoke-link', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/invoices/:id/revoke-link', { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] }, async (req, reply) => {
     const { tenantId, userId } = req.user as { tenantId: string; userId: string }
     const { id } = req.params as { id: string }
 
@@ -188,7 +189,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   // PRD §7.3: "Quote→Invoice conversion is one tap and preserves the link
   // for audit." Never edits the quote — creates a new, separately-numbered
   // INVOICE document instead (services/invoices.ts's convertQuoteToInvoice).
-  app.post('/invoices/:id/convert', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/invoices/:id/convert', { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] }, async (req, reply) => {
     const { tenantId } = req.user as { tenantId: string }
     const { id } = req.params as { id: string }
 
@@ -217,7 +218,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   // received moves Document.status the same way a PSP confirmation does,
   // and multiple partial entries accumulate the same way multiple partial
   // PSP payments would.
-  app.post('/invoices/:id/payments', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/invoices/:id/payments', { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] }, async (req, reply) => {
     const { tenantId } = req.user as { tenantId: string }
     const { id } = req.params as { id: string }
     const input = recordPaymentSchema.parse(req.body)
@@ -248,7 +249,7 @@ export default async function invoiceRoutes(app: FastifyInstance) {
   // failure mode returns a clear `reason` rather than a 500, since Rail A
   // (the client's own wa.me deep link, entirely separate from this) is
   // always available as the fallback (PRD §9.5).
-  app.post('/invoices/:id/send-railb', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/invoices/:id/send-railb', { preHandler: [app.authenticate, requireRole('OWNER', 'EDITOR')] }, async (req, reply) => {
     const { tenantId } = req.user as { tenantId: string }
     const { id } = req.params as { id: string }
 

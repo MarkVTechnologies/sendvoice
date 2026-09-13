@@ -88,6 +88,8 @@ export type Invoice = {
   convertedFromId: string | null
 }
 
+export type TeamUser = { id: string; phone: string; name: string | null; role: string; joined: boolean }
+
 export type WabaTemplateStatus = { id: string; name: string; status: string; rejectionReason: string | null }
 
 export type WabaStatus = {
@@ -173,6 +175,46 @@ export const api = {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  },
+  // PRD §8.1 P1: multi-user with roles. Both invite and remove return a
+  // result object (same reasoning as sendInvoiceViaRailB) since the normal
+  // failure cases — phone already in use, can't remove the Owner — are
+  // specific, expected outcomes the UI should name, not a generic error.
+  listUsers: () => request<TeamUser[]>('/users'),
+  inviteUser: async (
+    phone: string,
+    role: 'EDITOR' | 'VIEWER' | 'ACCOUNTANT',
+  ): Promise<{ ok: true; users: TeamUser[] } | { ok: false; reason: string }> => {
+    const token = useAuth.getState().token
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/users/invite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ phone, role }),
+      })
+    } catch {
+      throw new ApiError('Could not reach the server')
+    }
+    const body = (await res.json().catch(() => ({}))) as { error?: string; users?: TeamUser[] }
+    if (!res.ok) return { ok: false, reason: body.error ?? 'unknown_error' }
+    return { ok: true, users: body.users ?? [] }
+  },
+  removeUser: async (userId: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+    const token = useAuth.getState().token
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/users/${userId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: '{}',
+      })
+    } catch {
+      throw new ApiError('Could not reach the server')
+    }
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) return { ok: false, reason: body.error ?? 'unknown_error' }
+    return { ok: true }
   },
   // PRD §10.1: Embedded Signup via Telnyx's Hosted Signup. A 503 here means
   // TELNYX_APP_ID/TELNYX_API_KEY aren't configured server-side yet — the

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { withTenant } from '../lib/prisma.js'
+import { requireRole } from '../lib/authz.js'
 import { isEmbeddedSignupConfigured } from '../services/telnyx.js'
 import {
   listTemplates,
@@ -27,7 +28,7 @@ export default async function wabaRoutes(app: FastifyInstance) {
     return reply.send(sampleInvoicePdf)
   })
 
-  app.post('/waba/connect', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/waba/connect', { preHandler: [app.authenticate, requireRole('OWNER')] }, async (req, reply) => {
     if (!isEmbeddedSignupConfigured()) {
       return reply.code(503).send({ error: 'embedded_signup_not_configured' })
     }
@@ -45,7 +46,7 @@ export default async function wabaRoutes(app: FastifyInstance) {
     return reply.send({ ...connection, templates: templates.map(templateView) })
   })
 
-  app.post('/waba/templates/submit', { preHandler: app.authenticate }, async (req, reply) => {
+  app.post('/waba/templates/submit', { preHandler: [app.authenticate, requireRole('OWNER')] }, async (req, reply) => {
     const { tenantId } = req.user as { tenantId: string }
     try {
       await withTenant(tenantId, (tx) => submitCoreTemplates(tx, tenantId))

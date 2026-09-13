@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma, withTenant } from '../lib/prisma.js'
 import { defaultsForCountry, type TaxRules } from './tax.js'
 
-export type Identity = { userId: string; tenantId: string; phone: string }
+export type Identity = { userId: string; tenantId: string; phone: string; role: string }
 
 export type OnboardingInput = {
   businessName?: string
@@ -32,13 +32,20 @@ export type OnboardingInput = {
  * §1 "Tenant creation").
  */
 export async function resolveOrCreateIdentity(phone: string, input: OnboardingInput = {}): Promise<Identity> {
-  const existing = await prisma.$queryRaw<Array<{ user_id: string; tenant_id: string }>>`
+  const existing = await prisma.$queryRaw<Array<{ user_id: string; tenant_id: string; role: string }>>`
     select * from resolve_user_by_phone(${phone})
   `
 
   if (existing.length > 0) {
-    const { user_id: userId, tenant_id: tenantId } = existing[0]
-    return { userId, tenantId, phone }
+    const { user_id: userId, tenant_id: tenantId, role } = existing[0]
+    // PRD §8.1 P1: this is the moment an invited user (services/users.ts's
+    // inviteUser pre-creates their row with joinedAt null) becomes active —
+    // same lookup path as any other login, so an invite needs no separate
+    // "accept" step beyond completing OTP once. Only ever set once.
+    await withTenant(tenantId, (tx) =>
+      tx.user.updateMany({ where: { id: userId, joinedAt: null }, data: { joinedAt: new Date() } }),
+    )
+    return { userId, tenantId, phone, role }
   }
 
   const tenantId = randomUUID()
@@ -68,7 +75,7 @@ export async function resolveOrCreateIdentity(phone: string, input: OnboardingIn
       },
     })
     await tx.user.create({
-      data: { id: userId, tenantId, phone, role: 'OWNER' },
+      data: { id: userId, tenantId, phone, role: 'OWNER', joinedAt: new Date() },
     })
     // Never update this row's `rules` in place once invoices reference it —
     // a rate change must insert a new TaxProfile (new id, incremented
@@ -85,5 +92,5 @@ export async function resolveOrCreateIdentity(phone: string, input: OnboardingIn
     })
   })
 
-  return { userId, tenantId, phone }
+  return { userId, tenantId, phone, role: 'OWNER' }
 }
