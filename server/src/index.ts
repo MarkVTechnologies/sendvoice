@@ -8,6 +8,7 @@ import invoiceRoutes from './routes/invoices.js'
 import itemRoutes from './routes/items.js'
 import webhookRoutes from './routes/webhooks.js'
 import hostedRoutes from './routes/hosted.js'
+import wabaRoutes from './routes/waba.js'
 import { redis } from './lib/redis.js'
 
 declare module 'fastify' {
@@ -49,6 +50,7 @@ await app.register(authRoutes, { prefix: '/api' })
 await app.register(invoiceRoutes, { prefix: '/api' })
 await app.register(itemRoutes, { prefix: '/api' })
 await app.register(webhookRoutes, { prefix: '/api' })
+await app.register(wabaRoutes, { prefix: '/api' })
 await app.register(hostedRoutes) // public, unauthenticated — not under /api
 
 const port = Number(process.env.PORT ?? 4000)

@@ -47,6 +47,12 @@ export default function Dashboard() {
   const [exportTo, setExportTo] = useState('')
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+  // PRD §8.6/§10: Rail B send — always safe to attempt (the endpoint
+  // returns a clear reason rather than erroring), so no separate
+  // "is WABA connected" check is fetched here; the reason itself explains
+  // why, same honesty as Pay Now's disabled state before a PSP is wired.
+  const [sendingRailBId, setSendingRailBId] = useState<string | null>(null)
+  const [railBResult, setRailBResult] = useState<Record<string, string>>({})
 
   useEffect(() => {
     api
@@ -133,6 +139,30 @@ export default function Dashboard() {
       setPaymentError("Couldn't record that payment. Try again.")
     } finally {
       setRecordingPayment(false)
+    }
+  }
+
+  const RAILB_REASON_MESSAGES: Record<string, string> = {
+    not_connected: 'Connect WhatsApp Business first',
+    template_not_approved: "invoice_new template isn't approved yet",
+    opted_out: 'This customer opted out of WhatsApp messages',
+    no_whatsapp_number: 'No WhatsApp number on file for this customer',
+    already_sent: 'Already sent via WhatsApp Business',
+  }
+
+  async function sendRailB(invoiceId: string) {
+    setSendingRailBId(invoiceId)
+    setRailBResult((prev) => ({ ...prev, [invoiceId]: '' }))
+    try {
+      const result = await api.sendInvoiceViaRailB(invoiceId)
+      setRailBResult((prev) => ({
+        ...prev,
+        [invoiceId]: result.ok ? 'Sent' : (RAILB_REASON_MESSAGES[result.reason] ?? "Couldn't send"),
+      }))
+    } catch {
+      setRailBResult((prev) => ({ ...prev, [invoiceId]: "Couldn't send" }))
+    } finally {
+      setSendingRailBId(null)
     }
   }
 
@@ -294,6 +324,22 @@ export default function Dashboard() {
                       <button className="text-xs text-emerald-700 underline" onClick={() => openPaymentForm(inv)}>
                         Record payment
                       </button>
+                    )}
+                    {!isQuote && (
+                      <button
+                        className="text-xs text-emerald-700 underline disabled:opacity-50"
+                        disabled={sendingRailBId === inv.id}
+                        onClick={() => sendRailB(inv.id)}
+                      >
+                        {sendingRailBId === inv.id ? 'Sending…' : 'Send via WhatsApp Business'}
+                      </button>
+                    )}
+                    {railBResult[inv.id] && (
+                      <span
+                        className={`text-xs ${railBResult[inv.id] === 'Sent' ? 'text-emerald-600' : 'text-neutral-500'}`}
+                      >
+                        {railBResult[inv.id]}
+                      </span>
                     )}
                   </div>
                 </div>

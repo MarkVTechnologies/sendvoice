@@ -88,6 +88,16 @@ export type Invoice = {
   convertedFromId: string | null
 }
 
+export type WabaTemplateStatus = { id: string; name: string; status: string; rejectionReason: string | null }
+
+export type WabaStatus = {
+  status: string
+  wabaId: string | null
+  phoneNumberId: string | null
+  connectedAt: string | null
+  templates: WabaTemplateStatus[]
+}
+
 export const api = {
   requestOtp: (phone: string) =>
     request<{ ok: true; devCode?: string }>('/auth/otp/request', {
@@ -163,6 +173,41 @@ export const api = {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
+  },
+  // PRD §10.1: Embedded Signup via Telnyx's Hosted Signup. A 503 here means
+  // TELNYX_APP_ID/TELNYX_API_KEY aren't configured server-side yet — the
+  // caller shows the same honest "not available yet" state Pay Now used
+  // before Paystack was wired.
+  connectWaba: () => request<{ url: string }>('/waba/connect', { method: 'POST', body: '{}' }),
+  getWabaStatus: () => request<WabaStatus>('/waba/status'),
+  submitWabaTemplates: () => request<{ templates: WabaTemplateStatus[] }>('/waba/templates/submit', {
+    method: 'POST',
+    body: '{}',
+  }),
+  refreshWabaTemplates: () => request<{ templates: WabaTemplateStatus[] }>('/waba/templates/refresh', {
+    method: 'POST',
+    body: '{}',
+  }),
+  // PRD §8.6/§10: unlike every other call here, a Rail B send has several
+  // genuinely normal failure reasons (not connected yet, template still
+  // pending, customer opted out) that aren't really "errors" — returning a
+  // result object instead of throwing lets the caller show the specific
+  // reason rather than a generic failure message.
+  sendInvoiceViaRailB: async (invoiceId: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
+    const token = useAuth.getState().token
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/invoices/${invoiceId}/send-railb`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: '{}',
+      })
+    } catch {
+      throw new ApiError('Could not reach the server')
+    }
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    if (!res.ok) return { ok: false, reason: body.error ?? 'unknown_error' }
+    return { ok: true }
   },
   // The PDF route requires the same Bearer auth as everything else, so a
   // plain <a href> won't carry it — fetch it as a blob and hand back an

@@ -4,6 +4,7 @@ import Composer from './pages/Composer'
 import Dashboard from './pages/Dashboard'
 import Items from './pages/Items'
 import Onboarding from './pages/Onboarding'
+import WhatsAppBusiness from './pages/WhatsAppBusiness'
 import InstallPrompt from './components/InstallPrompt'
 import { api, type ApproveInvoicePayload } from './lib/api'
 import { useAuth } from './lib/auth'
@@ -58,6 +59,14 @@ export default function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/whatsapp"
+            element={
+              <RequireAuth>
+                <WhatsAppBusiness />
+              </RequireAuth>
+            }
+          />
         </Routes>
       </main>
       {token && <InstallPrompt />}
@@ -66,6 +75,7 @@ export default function App() {
           <NavLink to="/">New invoice</NavLink>
           <NavLink to="/dashboard">Dashboard</NavLink>
           <NavLink to="/items">Items</NavLink>
+          <NavLink to="/whatsapp">WhatsApp</NavLink>
         </nav>
       )}
     </div>

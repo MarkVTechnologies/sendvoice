@@ -349,7 +349,14 @@ model WabaConnection {
   phoneNumberId String?
   qualityRating String? // mirrors Meta's quality webhook
   status        String  @default("not_connected") // not_connected | pending | connected | throttled
-  connectedAt   DateTime?
+  // Telnyx's Hosted Signup session id (POST /v2/whatsapp/hosted_signups'
+  // response `id`) — stored so services/waba.ts can poll
+  // GET /v2/whatsapp/signup/{id}/status for this specific tenant without
+  // Telnyx needing to know our tenantId at all (the hosted signup URL has
+  // no field for a caller-supplied reference; correlation happens entirely
+  // on our side, by only ever polling the id we ourselves stored here).
+  signupSessionId String?
+  connectedAt     DateTime?
 
   templates WabaTemplate[]
 }
@@ -359,7 +366,15 @@ model WabaTemplate {
   wabaId     String
   waba       WabaConnection @relation(fields: [wabaId], references: [id])
   name       String // invoice_new | invoice_reminder_due | invoice_reminder_overdue | payment_received | quote_new
-  status     String // submitted | approved | rejected | paused
+  // Telnyx's own template id (POST /whatsapp/message_templates' response
+  // `id`), needed to poll for a status change after submission — separate
+  // from `name`, which is ours and stays stable across a rejection+resubmit.
+  telnyxTemplateId String?
+  // Telnyx's real status values (POST .../message_templates' documented
+  // response), not values we invented: PENDING | APPROVED | REJECTED |
+  // PAUSED | DISABLED. Stored verbatim rather than translated, so a status
+  // Telnyx adds later doesn't need a schema/code change to pass through.
+  status     String
   rejectionReason String?
   updatedAt  DateTime @updatedAt
 

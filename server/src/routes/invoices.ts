@@ -6,6 +6,7 @@ import { renderAndStorePdf } from '../services/pdf.js'
 import { generateHostedToken, hostedTokenExpiry } from '../services/hostedToken.js'
 import { recordPayment } from '../services/payments.js'
 import { buildInvoicesCsv } from '../services/csvExport.js'
+import { sendInvoiceViaRailB } from '../services/railB.js'
 
 // Needs to be a real absolute URL — it goes into a wa.me pre-filled message
 // (Rail A), not just a client-side fetch. Defaults to localhost for dev;
@@ -240,6 +241,28 @@ export default async function invoiceRoutes(app: FastifyInstance) {
       pdfUrl: `/api/invoices/${result.document.id}/pdf`,
       hostedUrl: hostedUrl(hostedToken),
     })
+  })
+
+  // PRD §8.6 P0 / §10: Rail B send for one specific invoice, from the
+  // merchant's own connected WhatsApp number. Always safe to call — every
+  // failure mode returns a clear `reason` rather than a 500, since Rail A
+  // (the client's own wa.me deep link, entirely separate from this) is
+  // always available as the fallback (PRD §9.5).
+  app.post('/invoices/:id/send-railb', { preHandler: app.authenticate }, async (req, reply) => {
+    const { tenantId } = req.user as { tenantId: string }
+    const { id } = req.params as { id: string }
+
+    let result: Awaited<ReturnType<typeof sendInvoiceViaRailB>>
+    try {
+      result = await withTenant(tenantId, (tx) => sendInvoiceViaRailB(tx, tenantId, id))
+    } catch {
+      return reply.code(404).send({ error: 'invoice_not_found' })
+    }
+
+    if (!result.ok) {
+      return reply.code(409).send({ error: result.reason })
+    }
+    return reply.send({ ok: true, deliveryId: result.deliveryId })
   })
 
   app.get('/invoices/:id/pdf', { preHandler: app.authenticate }, async (req, reply) => {
