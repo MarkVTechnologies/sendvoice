@@ -40,6 +40,13 @@ export default function Dashboard() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'bank_transfer'>('cash')
   const [recordingPayment, setRecordingPayment] = useState(false)
   const [paymentError, setPaymentError] = useState<string | null>(null)
+  // PRD §8.8 P1: "Export CSV... date-range filtered." Both bounds optional
+  // — an empty range exports everything, matching how the date filter on
+  // the server (routes/invoices.ts) treats an absent from/to.
+  const [exportFrom, setExportFrom] = useState('')
+  const [exportTo, setExportTo] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   useEffect(() => {
     api
@@ -129,6 +136,18 @@ export default function Dashboard() {
     }
   }
 
+  async function exportCsv() {
+    setExportError(null)
+    setExporting(true)
+    try {
+      await api.exportInvoicesCsv({ from: exportFrom || undefined, to: exportTo || undefined })
+    } catch {
+      setExportError("Couldn't export. Try again.")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const financial = invoices?.filter((inv) => inv.docType === 'INVOICE')
 
   const outstanding = financial
@@ -165,9 +184,38 @@ export default function Dashboard() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-end gap-2 rounded border p-3 text-sm">
+        <div className="flex flex-col">
+          <label className="text-xs text-neutral-500">From</label>
+          <input
+            type="date"
+            className="rounded border px-2 py-1"
+            value={exportFrom}
+            onChange={(e) => setExportFrom(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col">
+          <label className="text-xs text-neutral-500">To</label>
+          <input
+            type="date"
+            className="rounded border px-2 py-1"
+            value={exportTo}
+            onChange={(e) => setExportTo(e.target.value)}
+          />
+        </div>
+        <button
+          className="rounded bg-neutral-800 px-3 py-2 text-white disabled:opacity-50"
+          disabled={exporting}
+          onClick={exportCsv}
+        >
+          {exporting ? 'Exporting…' : 'Export CSV'}
+        </button>
+      </div>
+
       {error && <p className="text-sm text-red-600">{error}</p>}
       {revokeError && <p className="text-sm text-red-600">{revokeError}</p>}
       {convertError && <p className="text-sm text-red-600">{convertError}</p>}
+      {exportError && <p className="text-sm text-red-600">{exportError}</p>}
 
       {invoices && invoices.length > 0 && (
         <div className="flex flex-col gap-2">

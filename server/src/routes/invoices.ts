@@ -5,6 +5,7 @@ import { approveInvoice, convertQuoteToInvoice } from '../services/invoices.js'
 import { renderAndStorePdf } from '../services/pdf.js'
 import { generateHostedToken, hostedTokenExpiry } from '../services/hostedToken.js'
 import { recordPayment } from '../services/payments.js'
+import { buildInvoicesCsv } from '../services/csvExport.js'
 
 // Needs to be a real absolute URL — it goes into a wa.me pre-filled message
 // (Rail A), not just a client-side fetch. Defaults to localhost for dev;
@@ -44,6 +45,11 @@ const recordPaymentSchema = z.object({
   reference: z.string().max(200).optional(),
 })
 
+const exportQuerySchema = z.object({
+  from: z.string().date().optional(),
+  to: z.string().date().optional(),
+})
+
 /**
  * PRD §6.1 (J1) + §9.4: approval is the single moment a draft becomes a
  * real, immutable, numbered document. This must be the only place a
@@ -65,6 +71,45 @@ export default async function invoiceRoutes(app: FastifyInstance) {
     // hostedToken is the bearer credential for the public page — the client
     // gets the constructed hostedUrl, never the raw token in a response.
     return docs.map(({ hostedToken, ...d }) => ({ ...d, hostedUrl: hostedUrl(hostedToken) }))
+  })
+
+  // PRD §8.8 P1: "Export CSV... date-range filtered." Named as a distinct
+  // path rather than a query flag on GET /invoices above, since the two
+  // responses are genuinely different shapes (a file download vs. JSON) —
+  // conflating them behind an Accept header or a ?format= flag would save
+  // one route at the cost of making both harder to reason about.
+  app.get('/invoices/export', { preHandler: app.authenticate }, async (req, reply) => {
+    const { tenantId } = req.user as { tenantId: string }
+    const { from, to } = exportQuerySchema.parse(req.query)
+
+    const docs = await withTenant(tenantId, (tx) =>
+      tx.document.findMany({
+        where: {
+          tenantId,
+          ...(from || to
+            ? {
+                issueDate: {
+                  ...(from ? { gte: new Date(from) } : {}),
+                  // End-of-day, inclusive — a plain date-only `to` would
+                  // otherwise exclude everything issued on that date itself.
+                  ...(to ? { lte: new Date(`${to}T23:59:59.999Z`) } : {}),
+                },
+              }
+            : {}),
+        },
+        omit: { pdfData: true },
+        include: { customer: true },
+        orderBy: { issueDate: 'asc' },
+      }),
+    )
+
+    const csv = buildInvoicesCsv(docs)
+    reply.header('Content-Type', 'text/csv; charset=utf-8')
+    reply.header(
+      'Content-Disposition',
+      `attachment; filename="sendvoice-export-${new Date().toISOString().slice(0, 10)}.csv"`,
+    )
+    return reply.send(csv)
   })
 
   // draftId doubles as an idempotency key (services/invoices.ts) — a

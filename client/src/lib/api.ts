@@ -134,6 +134,36 @@ export const api = {
   // empty body under Content-Type: application/json, so every bodyless
   // call through this shared request() helper needs an explicit '{}'.
   deleteItem: (id: string) => request<{ ok: true }>(`/items/${id}`, { method: 'DELETE', body: '{}' }),
+  // PRD §8.8 P1: "Export CSV... date-range filtered." Same auth problem as
+  // the PDF route below (a plain <a href> can't carry the Bearer token),
+  // but this one also needs to trigger an actual file save rather than open
+  // a tab — a temporary <a download> click on the blob URL, then revoked,
+  // is the standard way to do that from a fetch() response.
+  exportInvoicesCsv: async (params?: { from?: string; to?: string }): Promise<void> => {
+    const token = useAuth.getState().token
+    const qs = new URLSearchParams()
+    if (params?.from) qs.set('from', params.from)
+    if (params?.to) qs.set('to', params.to)
+    const query = qs.toString() ? `?${qs.toString()}` : ''
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/invoices/export${query}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+    } catch {
+      throw new ApiError('Could not reach the server')
+    }
+    if (!res.ok) throw new ApiError(`CSV export failed: ${res.status}`, res.status)
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `sendvoice-export-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
   // The PDF route requires the same Bearer auth as everything else, so a
   // plain <a href> won't carry it — fetch it as a blob and hand back an
   // object URL the caller can open/revoke.
