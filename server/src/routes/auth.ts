@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
-import { issueOtp, verifyOtp } from '../services/otp.js'
+import { issueOtp, verifyOtp, OtpRateLimitError } from '../services/otp.js'
 import { resolveOrCreateIdentity } from '../services/auth.js'
 import { isTelnyxConfigured, sendOtp } from '../services/telnyx.js'
 
@@ -54,70 +54,95 @@ const verifyOtpSchema = z.object({
  * no email, no password (PRD §6.1 J1).
  */
 export default async function authRoutes(app: FastifyInstance) {
-  app.post('/auth/otp/request', async (req, reply) => {
-    const { phone } = requestOtpSchema.parse(req.body)
-    const code = await issueOtp(phone)
+  app.post(
+    '/auth/otp/request',
+    // Tighter than the app-wide default (index.ts) — this is the endpoint
+    // that actually costs money once Telnyx is live, so an IP is capped
+    // well before the phone-keyed limit in issueOtp would ever trigger for
+    // a single attacker. Legitimate use (a merchant mistyping and retrying)
+    // stays well under this.
+    { config: { rateLimit: { max: 8, timeWindow: '15 minutes' } } },
+    async (req, reply) => {
+      const { phone } = requestOtpSchema.parse(req.body)
 
-    if (isTelnyxConfigured()) {
+      let code: string
       try {
-        await sendOtp(phone, code)
+        code = await issueOtp(phone)
       } catch (err) {
-        req.log.error({ err, phone }, 'Telnyx OTP send failed')
-        return reply.code(502).send({ error: 'otp_send_failed' })
+        if (err instanceof OtpRateLimitError) {
+          return reply.code(429).send({ error: 'too_many_requests' })
+        }
+        throw err
       }
-      // A real send happened — devCode must never appear in the response
-      // once there's somewhere real for the code to have gone, regardless
-      // of NODE_ENV.
-      return reply.send({ ok: true })
-    }
 
-    // No BSP configured (dev, or prod misconfiguration) — nowhere real to
-    // deliver this, so log it and hand the code back directly for local
-    // testing. Never in production: devCode in a response only makes sense
-    // when nothing real was sent.
-    req.log.info({ phone, code }, 'otp issued (dev: Telnyx not configured, logging instead of sending)')
-    const devOnly = process.env.NODE_ENV !== 'production' ? { devCode: code } : {}
-    return reply.send({ ok: true, ...devOnly })
-  })
+      if (isTelnyxConfigured()) {
+        try {
+          await sendOtp(phone, code)
+        } catch (err) {
+          req.log.error({ err, phone }, 'Telnyx OTP send failed')
+          return reply.code(502).send({ error: 'otp_send_failed' })
+        }
+        // A real send happened — devCode must never appear in the response
+        // once there's somewhere real for the code to have gone, regardless
+        // of NODE_ENV.
+        return reply.send({ ok: true })
+      }
 
-  app.post('/auth/otp/verify', async (req, reply) => {
-    const {
-      phone,
-      code,
-      businessName,
-      country,
-      currency,
-      tax,
-      logo,
-      pdfTemplate,
-      referralSource,
-      address,
-      taxId,
-      bankName,
-      bankAccountName,
-      bankAccountNumber,
-    } = verifyOtpSchema.parse(req.body)
+      // No BSP configured (dev, or prod misconfiguration) — nowhere real to
+      // deliver this, so log it and hand the code back directly for local
+      // testing. Never in production: devCode in a response only makes sense
+      // when nothing real was sent.
+      req.log.info({ phone, code }, 'otp issued (dev: Telnyx not configured, logging instead of sending)')
+      const devOnly = process.env.NODE_ENV !== 'production' ? { devCode: code } : {}
+      return reply.send({ ok: true, ...devOnly })
+    },
+  )
 
-    const ok = await verifyOtp(phone, code)
-    if (!ok) {
-      return reply.code(401).send({ error: 'invalid_or_expired_code' })
-    }
+  app.post(
+    '/auth/otp/verify',
+    // Independent of the phone-keyed attempt lockout in verifyOtp itself —
+    // this stops an attacker distributing guesses across many phone numbers
+    // from one IP, which a per-phone cap alone can't see.
+    { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } },
+    async (req, reply) => {
+      const {
+        phone,
+        code,
+        businessName,
+        country,
+        currency,
+        tax,
+        logo,
+        pdfTemplate,
+        referralSource,
+        address,
+        taxId,
+        bankName,
+        bankAccountName,
+        bankAccountNumber,
+      } = verifyOtpSchema.parse(req.body)
 
-    const identity = await resolveOrCreateIdentity(phone, {
-      businessName,
-      country,
-      currency,
-      taxRules: tax,
-      pdfTemplate,
-      referralSource,
-      address,
-      taxId,
-      bankName,
-      bankAccountName,
-      bankAccountNumber,
-      logo: logo ? { data: Buffer.from(logo.dataBase64, 'base64'), mimeType: logo.mimeType } : undefined,
-    })
-    const token = await reply.jwtSign(identity)
-    return reply.send({ token })
-  })
+      const ok = await verifyOtp(phone, code)
+      if (!ok) {
+        return reply.code(401).send({ error: 'invalid_or_expired_code' })
+      }
+
+      const identity = await resolveOrCreateIdentity(phone, {
+        businessName,
+        country,
+        currency,
+        taxRules: tax,
+        pdfTemplate,
+        referralSource,
+        address,
+        taxId,
+        bankName,
+        bankAccountName,
+        bankAccountNumber,
+        logo: logo ? { data: Buffer.from(logo.dataBase64, 'base64'), mimeType: logo.mimeType } : undefined,
+      })
+      const token = await reply.jwtSign(identity)
+      return reply.send({ token })
+    },
+  )
 }

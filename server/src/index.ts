@@ -2,11 +2,13 @@ import 'dotenv/config'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import rateLimit from '@fastify/rate-limit'
 import authRoutes from './routes/auth.js'
 import invoiceRoutes from './routes/invoices.js'
 import itemRoutes from './routes/items.js'
 import webhookRoutes from './routes/webhooks.js'
 import hostedRoutes from './routes/hosted.js'
+import { redis } from './lib/redis.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -20,6 +22,18 @@ const app = Fastify({
 
 await app.register(cors, { origin: true })
 await app.register(jwt, { secret: process.env.JWT_SECRET ?? 'change-me' })
+
+// PRD §12 P0: "rate limiting and abuse detection on sends... before public
+// launch, not after." This is the general-purpose floor for every route;
+// the OTP endpoints (the ones that actually cost money once Telnyx is live)
+// get a much tighter, phone-keyed cap on top of this in services/otp.ts.
+// Backed by the existing Redis client, not the plugin's in-memory default,
+// so limits survive a dev-server restart and are shared across instances.
+await app.register(rateLimit, {
+  redis,
+  max: 300,
+  timeWindow: '1 minute',
+})
 
 app.decorate('authenticate', async (req, reply) => {
   try {
